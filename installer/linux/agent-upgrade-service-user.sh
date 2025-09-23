@@ -3,8 +3,6 @@ set -e
 
 base_url=${OPENBAS_URL}
 architecture=$(uname -m)
-user="$(id -un)"
-group="$(id -gn)"
 systemd_status=$(systemctl is-system-running)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
