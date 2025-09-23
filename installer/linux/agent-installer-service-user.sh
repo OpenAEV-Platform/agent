@@ -53,7 +53,7 @@ group="$GROUP_ARG"
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
 systemd_status=$(systemctl is-system-running)
-install_dir="${OPENBAS_INSTALL_DIR}-${user}"
+install_dir="$HOME/${OPENBAS_INSTALL_DIR}-${user}"
 service_name="${user}-${OPENBAS_SERVICE_NAME}"
 
 

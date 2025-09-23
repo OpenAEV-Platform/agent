@@ -52,6 +52,7 @@ installation_mode = "session-user"
 service_name = "${OPENBAS_SERVICE_NAME}"
 EOF
 
-echo "03. Kill the process of the existing service"
-(pkill -9 -f "${install_dir}/openbas-agent") || (echo "Error while killing the process of the openbas agent service" >&2 && exit 1)
-echo "The OpenBAS agent process was stopped, the service will automatically restart in 60 seconds"
+echo "03. Restarting the service"
+systemctl --user restart ${session_name} || (echo "Fail restarting ${session_name}" >&2 && exit 1)
+
+echo "OpenBAS Agent Session User started."

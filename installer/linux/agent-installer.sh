@@ -14,9 +14,11 @@ if [ "${os}" != "linux" ]; then
   exit 1
 fi
 
-if ! systemctl is-system-running >/dev/null 2>&1; then
-  echo "Linux detected but systemd is not running. This installation is not supported."
+if [ "$systemd_status" != "running" ] && [ "$systemd_status" != "degraded" ]; then
+  echo "Systemd is in unexpected state: $systemd_status. Installation is not supported."
   exit 1
+else
+  echo "Systemd is in acceptable state: $systemd_status"
 fi
 
 echo "Starting install script for ${os} | ${architecture}"
