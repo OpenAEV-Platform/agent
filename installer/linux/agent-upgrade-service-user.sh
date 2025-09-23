@@ -8,8 +8,19 @@ group="$(id -gn)"
 systemd_status=$(systemctl is-system-running)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
-install_dir="${OPENBAS_INSTALL_DIR}-${user}"
-service_name="${user}-${OPENBAS_SERVICE_NAME}"
+session_name="${OPENBAS_SERVICE_NAME}"
+
+# Check if OPENBAS_INSTALL_DIR is an absolute path (starts with /)
+case "${OPENBAS_INSTALL_DIR}" in
+    /*)
+        # It's an absolute path, use as is
+        install_dir="${OPENBAS_INSTALL_DIR}"
+        ;;
+    *)
+        # It's a relative path, prepend $HOME
+        install_dir="$HOME/${OPENBAS_INSTALL_DIR}"
+        ;;
+esac
 
 if [ "${os}" != "linux" ]; then
   echo "Operating system $OSTYPE is not supported yet, please create a ticket in openbas github project"
@@ -25,9 +36,7 @@ fi
 
 echo "Starting upgrade script for ${os} | ${architecture}"
 
-
 echo "01. Downloading OpenBAS Agent into ${install_dir}..."
-(mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
 curl -sSfL ${base_url}/api/agent/executable/openbas/${os}/${architecture} -o ${install_dir}/openbas-agent_upgrade
 mv ${install_dir}/openbas-agent_upgrade ${install_dir}/openbas-agent
 chmod +x ${install_dir}/openbas-agent
@@ -41,7 +50,7 @@ url = "${OPENBAS_URL}"
 token = "${OPENBAS_TOKEN}"
 unsecured_certificate = "${OPENBAS_UNSECURED_CERTIFICATE}"
 with_proxy = "${OPENBAS_WITH_PROXY}"
-installation_mode = "service-user"
+installation_mode = "session-user"
 service_name = "${OPENBAS_SERVICE_NAME}"
 EOF
 

@@ -38,7 +38,7 @@ service_name = "${OPENBAS_SERVICE_NAME}"
 EOF
 
 echo "03. Starting agent service"
-launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/${session_name}.plist || (echo "Fail restarting ${session_name}" >&2 && exit 1)
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/${session_name}.plist
+launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/io.filigran.${session_name}.plist || (echo "Fail restarting io.filigran.${session_name}" >&2 && exit 1)
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.filigran.${session_name}.plist
 
 echo "OpenBAS Agent Session User started."

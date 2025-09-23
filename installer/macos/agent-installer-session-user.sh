@@ -42,13 +42,13 @@ EOF
 
 echo "04. Writing agent service"
 mkdir -p ~/Library/LaunchAgents
-cat > ~/Library/LaunchAgents/${session_name}.plist <<EOF
+cat > ~/Library/LaunchAgents/io.filigran.${session_name}.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
     <dict>
         <key>Label</key>
-        <string>${session_name}</string>
+        <string>io.filigran.${session_name}</string>
 
         <key>Program</key>
         <string>${install_dir}/openbas-agent</string>
@@ -81,7 +81,7 @@ cat > ~/Library/LaunchAgents/${session_name}.plist <<EOF
 EOF
 
 echo "05. Starting agent service"
-launchctl enable user/$(id -u)/~/Library/LaunchAgents/${session_name}.plist
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/${session_name}.plist
+launchctl enable gui/$(id -u)/io.filigran.${session_name}
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.filigran.${session_name}.plist
 
 echo "OpenBAS Agent Session User started."

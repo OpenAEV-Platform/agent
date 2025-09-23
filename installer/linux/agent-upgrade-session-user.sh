@@ -6,9 +6,19 @@ architecture=$(uname -m)
 systemd_status=$(systemctl is-system-running)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
-install_dir="$HOME/${OPENBAS_INSTALL_DIR}"
 session_name="${OPENBAS_SERVICE_NAME}"
 
+# Check if OPENBAS_INSTALL_DIR is an absolute path (starts with /)
+case "${OPENBAS_INSTALL_DIR}" in
+    /*)
+        # It's an absolute path, use as is
+        install_dir="${OPENBAS_INSTALL_DIR}"
+        ;;
+    *)
+        # It's a relative path, prepend $HOME
+        install_dir="$HOME/${OPENBAS_INSTALL_DIR}"
+        ;;
+esac
 
 if [ "${os}" != "linux" ]; then
   echo "Operating system $OSTYPE is not supported yet, please create a ticket in openbas github project"

@@ -10,7 +10,7 @@ use crate::common::error_model::Error;
 fn compute_working_dir(asset_agent_id: &str) -> PathBuf {
     let current_exe_patch = env::current_exe().unwrap();
     let executable_path = current_exe_patch.parent().unwrap();
-    executable_path.join(format!("execution-{asset_agent_id}"))
+    executable_path.join("runtimes").join(format!("execution-{asset_agent_id}"))
 }
 
 fn command_with_context(asset_agent_id: &str, command: &str) -> String {

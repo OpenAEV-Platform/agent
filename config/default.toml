@@ -6,3 +6,5 @@ token = "ChangeMe"
 unsecured_certificate = false
 with_proxy = false
 installation_mode= "session-user"
+service_name = "OBASAgentService"
+service_full_name = "OBASAgentService"

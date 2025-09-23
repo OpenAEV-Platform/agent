@@ -430,6 +430,14 @@ FunctionEnd
 section "install"
   # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
   setOutPath $INSTDIR
+
+  ;stopping existing service
+  ExecWait 'sc stop $ServiceName' $0
+
+  ;deleting existing service
+  ExecWait 'sc delete $ServiceName' $0
+
+
   # Files added here should be removed by the uninstaller (see section "uninstall")
   file "..\..\target\release\openbas-agent.exe"
   file "openbas.ico"
@@ -448,12 +456,6 @@ section "install"
     FileWrite $4 "service_full_name = $\"$ServiceName$\"$\r$\n"
     FileWrite $4 "$\r$\n" ; newline
   FileClose $4
-
-  ;stopping existing service
-  ExecWait 'sc stop $ServiceName' $0
-
-  ;deleting existing service
-  ExecWait 'sc delete $ServiceName' $0
 
   ; register windows service
   ExecWait 'sc create $ServiceName error="severe" displayname="$DisplayName" obj="$ConfigUser" password="$ConfigPassword" type="own" start="auto" binpath="$INSTDIR\openbas-agent.exe"' $R0

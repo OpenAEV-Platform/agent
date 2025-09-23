@@ -15,11 +15,11 @@ static EXECUTING_MAX_TIME: u64 = 20; // 20 minutes
                                      // After X minutes define in this constant, all dir matching 'execution-' will be removed
 static DIRECTORY_MAX_TIME: u64 = 2880; // 2 days
 
-fn get_old_execution_directories(path: &str, since_minutes: u64) -> Result<Vec<DirEntry>, Error> {
+fn get_old_execution_directories(subfolder: &str, path: &str, since_minutes: u64) -> Result<Vec<DirEntry>, Error> {
     let now = SystemTime::now();
     let current_exe_patch = env::current_exe().unwrap();
     let executable_path = current_exe_patch.parent().unwrap();
-    let entries = fs::read_dir(executable_path).unwrap();
+    let entries = fs::read_dir(executable_path.join(subfolder)).unwrap();
     entries
         .into_iter()
         .filter(|entry| {
@@ -63,10 +63,10 @@ pub fn clean() -> Result<JoinHandle<()>, Error> {
         create_cleanup_scripts();
         // While no stop signal received
         while THREADS_CONTROL.load(Ordering::Relaxed) {
-            let kill_directories =
-                get_old_execution_directories("execution-", EXECUTING_MAX_TIME).unwrap();
+            let kill_runtimes_directories =
+                get_old_execution_directories("runtimes", "execution-", EXECUTING_MAX_TIME).unwrap();
             // region Handle killing old execution- directories
-            for dir in kill_directories {
+            for dir in kill_runtimes_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
                 info!("[cleanup thread] Killing process for directory {dirname}");
@@ -91,11 +91,25 @@ pub fn clean() -> Result<JoinHandle<()>, Error> {
                 // After kill, rename from execution to executed
                 fs::rename(dirname, dirname.replace("execution", "executed")).unwrap();
             }
+            let rename_payloads_directories = get_old_execution_directories("payloads", "execution-", EXECUTING_MAX_TIME).unwrap();
+            for dir in rename_payloads_directories {
+                let dir_path = dir.path();
+                let dirname = dir_path.to_str().unwrap();
+                fs::rename(dirname, dirname.replace("execution", "executed")).unwrap();
+            }
             // endregion
             // region Handle remove of old executed- directories
-            let remove_directories =
-                get_old_execution_directories("executed-", DIRECTORY_MAX_TIME).unwrap();
-            for dir in remove_directories {
+            let remove_runtimes_directories =
+                get_old_execution_directories("runtimes", "executed-", DIRECTORY_MAX_TIME).unwrap();
+            for dir in remove_runtimes_directories {
+                let dir_path = dir.path();
+                let dirname = dir_path.to_str().unwrap();
+                info!("[cleanup thread] Removing directory {dirname}");
+                fs::remove_dir_all(dir_path).unwrap()
+            }
+            let remove_payloads_directories =
+                get_old_execution_directories("payloads", "executed-", DIRECTORY_MAX_TIME).unwrap();
+            for dir in remove_payloads_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
                 info!("[cleanup thread] Removing directory {dirname}");

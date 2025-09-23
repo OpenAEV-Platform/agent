@@ -10,8 +10,10 @@ mod tests;
 use log::{error, info};
 use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
 use std::env;
+use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::panic;
+use std::path::{PathBuf};
 use std::sync::atomic::AtomicBool;
 use std::thread::JoinHandle;
 
@@ -51,6 +53,11 @@ pub fn set_error_hook() {
     }));
 }
 
+fn compute_working_dir() -> PathBuf {
+    let current_exe_path = env::current_exe().unwrap();
+    current_exe_path.parent().unwrap().to_path_buf()
+}
+
 fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHandle<()>>, Error> {
     let url = settings_data.openbas.url;
     let token = settings_data.openbas.token;
@@ -65,6 +72,11 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
         execution_details.is_elevated,
         execution_details.is_service
     );
+
+    let working_dir = compute_working_dir();
+    create_dir_all(working_dir.join("runtimes")).expect("Failed to create runtimes directory");
+    create_dir_all(working_dir.join("payloads")).expect("Failed to create payloads directory");
+
     let keep_alive_thread = keep_alive::ping(
         url.clone(),
         token.clone(),

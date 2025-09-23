@@ -1,15 +1,15 @@
 [Net.ServicePointManager]::SecurityProtocol += [Net.SecurityProtocolType]::Tls12;
 switch ($env:PROCESSOR_ARCHITECTURE)
 {
-	"AMD64" {$architecture = "x86_64"; Break}
-	"ARM64" {$architecture = "arm64"; Break}
-	"x86" {
-		switch ($env:PROCESSOR_ARCHITEW6432)
-		{
-			"AMD64" {$architecture = "x86_64"; Break}
-			"ARM64" {$architecture = "arm64"; Break}
-		}
-	}
+    "AMD64" {$architecture = "x86_64"; Break}
+    "ARM64" {$architecture = "arm64"; Break}
+    "x86" {
+       switch ($env:PROCESSOR_ARCHITEW6432)
+       {
+          "AMD64" {$architecture = "x86_64"; Break}
+          "ARM64" {$architecture = "arm64"; Break}
+       }
+    }
 }
 
 function Sanitize-UserName {
@@ -24,23 +24,29 @@ function Sanitize-UserName {
 
 if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR_ARCHITECTURE is not supported yet, please create a ticket in openbas github project" }
 
-$BasePath = "${OPENBAS_INSTALL_DIR}\";
+$BasePath = "${OPENBAS_INSTALL_DIR}";
 $User = whoami;
-$SanitizedUser =  Sanitize-UserName -UserName $user;
-$AgentName = "${OPENBAS_SERVICE_NAME}-$SanitizedUser";
-$InstallDir = $BasePath + $AgentName;
+$SanitizedUser = Sanitize-UserName -UserName $user;
+$ServiceName = "${OPENBAS_SERVICE_NAME}";
+$AgentName = "$ServiceName-$SanitizedUser";
+
+if ($BasePath -match "\\$ServiceName-[^\\]+$" -or $BasePath -match "/$ServiceName-[^/]+$") {
+    $InstallDir = $BasePath
+} else {
+    if (-not $BasePath.EndsWith('\') -and -not $BasePath.EndsWith('/')) {
+        $BasePath += '\'
+    }
+    $InstallDir = $BasePath + $AgentName
+}
+
 $AgentPath = $InstallDir + "\openbas-agent.exe";
 $AgentUpgradedPath = $InstallDir + "\openbas-agent_upgrade.exe";
 
-#Download the agent exe
 Invoke-WebRequest -Uri "${OPENBAS_URL}/api/agent/executable/openbas/windows/${architecture}" -OutFile $AgentUpgradedPath;
 
-#Stop the service
 sc.exe stop $AgentName;
 
-#Delete the current exe and replace it with the new one
 rm -force $AgentPath;
 mv $AgentUpgradedPath $AgentPath;
 
-#Start the service
 sc.exe start $AgentName;

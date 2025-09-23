@@ -660,8 +660,10 @@ section "uninstall"
      ; Remove the existing scheduled task if it exists
      ExecWait 'schtasks /Delete /TN "$AgentName" /F' $0
    ${Else}
-     ;process kill is done in the powershell script
-     ExecWait 'powershell.exe -ExecutionPolicy Bypass -WindowStyle hidden -File "$INSTDIR\openbas_agent_kill.ps1" -location "$INSTDIR"'
+     ; Try by name first
+     ExecWait '"taskkill.exe" /F /IM openbas-agent.exe'
+     ; Then try PowerShell with wildcard
+     ExecWait '"powershell.exe" -ExecutionPolicy Bypass -WindowStyle hidden -Command "Get-Process | Where-Object { $$_.Path -like \"*openbas-agent*\" } | Stop-Process -Force"'
 
      SetRegView 64
      ; Remove registry entry

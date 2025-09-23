@@ -361,6 +361,13 @@ jobs:
             - cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
             - cargo-{{ arch }}
       - run: curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run: rustup toolchain install stable-x86_64-apple-darwin
+      - run: rustup default stable-x86_64-apple-darwin
+      # Install quality tools
+      - run: |
+          rustup component add clippy
+          rustup component add rustfmt
+          cargo install cargo-audit
       # Run checks
       - run: cargo check
       - run: . "$HOME/.cargo/env"; cargo build --release
@@ -383,6 +390,8 @@ jobs:
             - cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
             - cargo-{{ arch }}
       - run: curl https://sh.rustup.rs -sSf | sh -s -- -y
+      - run: rustup toolchain install stable-x86_64-apple-darwin
+      - run: rustup default stable-x86_64-apple-darwin
       - run: . "$HOME/.cargo/env"; cargo build --release
       - run: . "$HOME/.cargo/env"; cargo test --release
       - run: strip ./target/release/openbas-agent

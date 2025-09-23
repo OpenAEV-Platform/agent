@@ -50,6 +50,7 @@ base_url=${OPENBAS_URL}
 architecture=$(uname -m)
 user="$USER_ARG"
 group="$GROUP_ARG"
+uid=$(id -u ${user})
 
 install_dir="${OPENBAS_INSTALL_DIR}-${user}"
 service_name="${user}-${OPENBAS_SERVCICE_NAME}"
@@ -67,7 +68,7 @@ fi
 echo "Starting install script for ${os} | ${architecture}"
 
 echo "01. Stopping existing ${service_name}..."
-launchctl bootout system/ ~/Library/LaunchDaemons/${service_name}.plist || echo "${service_name} already stopped"
+launchctl bootout gui/${uid} /Library/LaunchAgents/${service_name}.plist || echo "${service_name} already stopped"
 
 echo "02. Downloading OpenBAS Agent into ${install_dir}..."
 (mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
@@ -88,14 +89,14 @@ service_name = "${OPENBAS_SERVICE_NAME}"
 EOF
 
 echo "04. Writing agent service"
-mkdir -p ~/Library/LaunchDaemons
-cat > ~/Library/LaunchDaemons/${service_name}.plist <<EOF
+mkdir -p /Library/LaunchAgents
+cat > /Library/LaunchAgents/${service_name}.plist <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple Computer//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
     <dict>
         <key>Label</key>
-        <string>${service_name}</string>
+        <string>io.filigran.${service_name}</string>
 
         <key>Program</key>
         <string>${install_dir}/openbas-agent</string>
@@ -136,7 +137,7 @@ EOF
 
 chown -R ${user}:${group} ${install_dir}
 echo "05. Starting agent service"
-launchctl enable system/${service_name}
-launchctl bootstrap system/ ~/Library/LaunchDaemons/${service_name}.plist
+launchctl enable gui/${uid}/io.filigran.${service_name}
+launchctl bootstrap gui/${uid} /Library/LaunchAgents/${service_name}.plist
 
 echo "OpenBAS Agent Service User started."
