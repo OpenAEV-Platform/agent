@@ -3,9 +3,9 @@ mod tests {
     use crate::process::agent_exec::command_execution;
     use std::env;
     use std::fs;
+    use std::fs::create_dir_all;
     use std::panic;
     use std::path::PathBuf;
-    use std::fs::create_dir_all;
 
     const TEST_AGENT_ID: &str = &"62e1e7a6-79af-47ae-ac4a-8324c2b82197";
     const CLEANUP_ENABLED: bool = true;
@@ -18,7 +18,9 @@ mod tests {
     fn cleanup_after_tests() {
         if CLEANUP_ENABLED {
             let working_dir = compute_working_dir();
-            let path = working_dir.join("runtimes").join(format!("execution-{}", TEST_AGENT_ID));
+            let path = working_dir
+                .join("runtimes")
+                .join(format!("execution-{}", TEST_AGENT_ID));
             let _ = fs::remove_dir_all(path);
         }
     }

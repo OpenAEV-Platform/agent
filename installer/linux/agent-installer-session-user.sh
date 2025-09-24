@@ -7,6 +7,7 @@ architecture=$(uname -m)
 os=$(uname | tr '[:upper:]' '[:lower:]')
 install_dir="$HOME/${OPENBAS_INSTALL_DIR}"
 session_name="${OPENBAS_SERVICE_NAME}"
+systemd_unit_dir="$HOME/.config/systemd/user/"
 
 if [ "${os}" != "linux" ]; then
   echo "Operating system $OSTYPE is not supported yet, please create a ticket in openbas github project"
@@ -56,7 +57,8 @@ EOF
 
 echo "05. Starting agent service"
 (
-  ln -sf ${install_dir}/${session_name}.service $HOME/.config/systemd/user/
+  mkdir -p $systemd_unit_dir
+  ln -sf ${install_dir}/${session_name}.service $systemd_unit_dir
   systemctl --user daemon-reload
   systemctl --user enable ${session_name}
   systemctl --user start ${session_name}
