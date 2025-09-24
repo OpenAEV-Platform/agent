@@ -15,7 +15,11 @@ static EXECUTING_MAX_TIME: u64 = 20; // 20 minutes
                                      // After X minutes define in this constant, all dir matching 'execution-' will be removed
 static DIRECTORY_MAX_TIME: u64 = 2880; // 2 days
 
-fn get_old_execution_directories(subfolder: &str, path: &str, since_minutes: u64) -> Result<Vec<DirEntry>, Error> {
+fn get_old_execution_directories(
+    subfolder: &str,
+    path: &str,
+    since_minutes: u64,
+) -> Result<Vec<DirEntry>, Error> {
     let now = SystemTime::now();
     let current_exe_patch = env::current_exe().unwrap();
     let executable_path = current_exe_patch.parent().unwrap();
@@ -64,7 +68,8 @@ pub fn clean() -> Result<JoinHandle<()>, Error> {
         // While no stop signal received
         while THREADS_CONTROL.load(Ordering::Relaxed) {
             let kill_runtimes_directories =
-                get_old_execution_directories("runtimes", "execution-", EXECUTING_MAX_TIME).unwrap();
+                get_old_execution_directories("runtimes", "execution-", EXECUTING_MAX_TIME)
+                    .unwrap();
             // region Handle killing old execution- directories
             for dir in kill_runtimes_directories {
                 let dir_path = dir.path();
@@ -91,7 +96,9 @@ pub fn clean() -> Result<JoinHandle<()>, Error> {
                 // After kill, rename from execution to executed
                 fs::rename(dirname, dirname.replace("execution", "executed")).unwrap();
             }
-            let rename_payloads_directories = get_old_execution_directories("payloads", "execution-", EXECUTING_MAX_TIME).unwrap();
+            let rename_payloads_directories =
+                get_old_execution_directories("payloads", "execution-", EXECUTING_MAX_TIME)
+                    .unwrap();
             for dir in rename_payloads_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();

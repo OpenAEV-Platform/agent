@@ -13,7 +13,7 @@ use std::env;
 use std::fs::create_dir_all;
 use std::ops::Deref;
 use std::panic;
-use std::path::{PathBuf};
+use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::thread::JoinHandle;
 
