@@ -28,7 +28,7 @@ jobs:
         working-directory: agent
     steps:
       - name: checkout repo content
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
           repository: OpenBAS-Platform/agent
           ref: ${{ inputs.branch_agent }}
