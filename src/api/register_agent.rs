@@ -82,7 +82,7 @@ impl Client {
         });
         let post_data = json!({
           "asset_name": hostname::get()?.to_string_lossy(),
-          "asset_external_reference": mid::get("openbas").unwrap(),
+          "asset_external_reference": mid::get("openaev").unwrap(),
           "endpoint_agent_version": VERSION,
           "endpoint_ips": ip_addresses,
           "endpoint_platform": get_operating_system(),
@@ -97,7 +97,7 @@ impl Client {
           "agent_service_name": service_name,
         });
         // endregion
-        // Post the input to the OpenBAS API
+        // Post the input to the OpenAEV API
         match self.post("/api/endpoints/register").json(&post_data).send() {
             Ok(response) => {
                 if response.status().is_success() {

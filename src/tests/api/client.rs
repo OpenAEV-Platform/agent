@@ -16,7 +16,7 @@ mod tests {
             .mock("POST", "/api/test")
             .match_header(
                 "user-agent",
-                format!("openbas-agent/{}", crate::api::VERSION).as_str(),
+                format!("openaev-agent/{}", crate::api::VERSION).as_str(),
             )
             .match_header(AUTHORIZATION_HEADER, format!("Bearer {}", TOKEN).as_str())
             .with_status(200)

@@ -6,9 +6,9 @@
 !insertmacro GetParameters
 !insertmacro GetOptions
 
-!define APPNAME "OBAS Agent"
+!define APPNAME "OAEV Agent"
 !define COMPANYNAME "Filigran"
-!define DESCRIPTION "Filigran's agent for OpenBAS"
+!define DESCRIPTION "Filigran's agent for OpenAEV"
 # These will be displayed by the "Click here for support information" link in "Add/Remove Programs"
 # It is possible to use "mailto:" links in here to open the email client
 !define HELPURL "https://filigran.io/" # "Support Information" link
@@ -24,7 +24,7 @@ RequestExecutionLevel admin ;Require admin rights on NT6+ (When UAC is turned on
 LicenseData "license.txt"
 # This will be in the installer/uninstaller's title bar
 Name "${COMPANYNAME} - ${APPNAME}"
-Icon "openbas.ico"
+Icon "openaev.ico"
 outFile "agent-installer.exe"
  
 ; page definition
@@ -214,7 +214,7 @@ function .onInit
     Push $R0
     Pop $1
 
-    StrCpy $0 "OPENBAS_URL"
+    StrCpy $0 "OPENAEV_URL"
     Call ExtractParameter
     StrCpy $ConfigURL $0
 
@@ -240,7 +240,7 @@ function .onInit
 
     ; Set defaults if not provided
     ${If} $ConfigServiceName == ""
-        StrCpy $ConfigServiceName "OBASAgentService"
+        StrCpy $ConfigServiceName "OAEVAgentService"
     ${EndIf}
     ${If} $ConfigInstallDir == ""
         StrCpy $ConfigInstallDir "$PROGRAMFILES\${COMPANYNAME}\${APPNAME}"
@@ -267,7 +267,7 @@ Function nsDialogsConfig
 		Abort
 	${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 12u "OpenBAS URL *"
+  ${NSD_CreateLabel} 0 0 100% 12u "OpenAEV URL *"
 	Pop $LabelURL
 	${NSD_CreateText} 0 13u 100% 12u "http://localhost:3001"
 	Pop $ConfigURLForm
@@ -349,13 +349,13 @@ section "install"
   ExecWait 'sc delete $ServiceName' $0
 
   # Files added here should be removed by the uninstaller (see section "uninstall")
-  file "..\..\target\release\openbas-agent.exe"
-  file "openbas.ico"
+  file "..\..\target\release\openaev-agent.exe"
+  file "openaev.ico"
   
   ; write agent config file
-  FileOpen $4 "$INSTDIR\openbas-agent-config.toml" w
+  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
     FileWrite $4 "debug=false$\r$\n"
-    FileWrite $4 "[openbas]$\r$\n"
+    FileWrite $4 "[openaev]$\r$\n"
     FileWrite $4 "url = $\"$ConfigURL$\"$\r$\n"
     FileWrite $4 "token = $\"$ConfigToken$\"$\r$\n"
     FileWrite $4 "unsecured_certificate = $ConfigUnsecuredCertificate$\r$\n"
@@ -367,7 +367,7 @@ section "install"
   FileClose $4
 
   ; register windows service
-  ExecWait 'sc create $ServiceName error="severe" displayname="${displayName}" type="own" start="auto" binpath="$INSTDIR\openbas-agent.exe"'
+  ExecWait 'sc create $ServiceName error="severe" displayname="${displayName}" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"'
 
   ; configure restart in case of failure
   ExecWait 'sc failure $ServiceName reset= 0 actions= restart/60000/restart/60000/restart/60000'
@@ -384,7 +384,7 @@ sectionEnd
 
 Function un.ReadServiceNameFromToml
     StrCpy $ServiceName "" ; Reset
-    FileOpen $0 "$INSTDIR\openbas-agent-config.toml" r
+    FileOpen $0 "$INSTDIR\openaev-agent-config.toml" r
 
 read_loop:
     FileRead $0 $1

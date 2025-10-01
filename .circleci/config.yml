@@ -68,16 +68,16 @@ jobs:
           name: push to jfrog
           command: |
             $env:version = if ($env:CIRCLE_TAG) { $env:CIRCLE_TAG } else { if ($env:CIRCLE_BRANCH -eq "main") { "latest" } else { "prerelease" } }
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./target/release/openbas-agent.exe "https://filigran.jfrog.io/artifactory/openbas-agent/windows/x86_64/openbas-agent-$env:version.exe"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer.exe "https://filigran.jfrog.io/artifactory/openbas-agent/windows/x86_64/openbas-agent-installer-$env:version.exe"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-installer-$env:version.ps1"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-upgrade-$env:version.ps1"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-session-user.exe "https://filigran.jfrog.io/artifactory/openbas-agent/windows/x86_64/openbas-agent-installer-session-user-$env:version.exe"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-session-user.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-installer-session-user-$env:version.ps1"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade-session-user.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-upgrade-session-user-$env:version.ps1"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-service-user.exe "https://filigran.jfrog.io/artifactory/openbas-agent/windows/x86_64/openbas-agent-installer-service-user-$env:version.exe"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-service-user.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-installer-service-user-$env:version.ps1"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade-service-user.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-upgrade-service-user-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./target/release/openaev-agent.exe "https://filigran.jfrog.io/artifactory/openaev-agent/windows/x86_64/openaev-agent-$env:version.exe"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer.exe "https://filigran.jfrog.io/artifactory/openaev-agent/windows/x86_64/openaev-agent-installer-$env:version.exe"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-installer-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-upgrade-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-session-user.exe "https://filigran.jfrog.io/artifactory/openaev-agent/windows/x86_64/openaev-agent-installer-session-user-$env:version.exe"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-session-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-installer-session-user-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade-session-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-upgrade-session-user-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-service-user.exe "https://filigran.jfrog.io/artifactory/openaev-agent/windows/x86_64/openaev-agent-installer-service-user-$env:version.exe"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-service-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-installer-service-user-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade-service-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-upgrade-service-user-$env:version.ps1"
       - run: |
           cargo install cargo-cache
           cargo-cache -a clean-unref
@@ -87,7 +87,7 @@ jobs:
             - ~/.cargo
   windows_arm_64_compile:
     machine: true
-    resource_class: openbas-platform/openbas-agent-windows-64bits-arm
+    resource_class: openaev-platform/openaev-agent-windows-64bits-arm
     shell: 'powershell.exe -ExecutionPolicy Bypass'
     steps:
       - checkout
@@ -119,7 +119,7 @@ jobs:
             - ~/.cargo
   windows_arm_64_build:
     machine: true
-    resource_class: openbas-platform/openbas-agent-windows-64bits-arm
+    resource_class: openaev-platform/openaev-agent-windows-64bits-arm
     shell: 'powershell.exe -ExecutionPolicy Bypass'
     steps:
       - checkout
@@ -159,16 +159,16 @@ jobs:
           name: push to jfrog
           command: |
             $env:version = if ($env:CIRCLE_TAG) { $env:CIRCLE_TAG } else { if ($env:CIRCLE_BRANCH -eq "main") { "latest" } else { "prerelease" } }
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./target/release/openbas-agent.exe "https://filigran.jfrog.io/artifactory/openbas-agent/windows/arm64/openbas-agent-$env:version.exe"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer.exe "https://filigran.jfrog.io/artifactory/openbas-agent/windows/arm64/openbas-agent-installer-$env:version.exe"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-installer-$env:version.ps1"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-upgrade-$env:version.ps1"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-session-user.exe "https://filigran.jfrog.io/artifactory/openbas-agent/windows/arm64/openbas-agent-installer-session-user-$env:version.exe"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-session-user.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-installer-session-user-$env:version.ps1"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade-session-user.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-upgrade-session-user-$env:version.ps1"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-service-user.exe "https://filigran.jfrog.io/artifactory/openbas-agent/windows/arm64/openbas-agent-installer-service-user-$env:version.exe"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-service-user.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-installer-service-user-$env:version.ps1"
-            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade-service-user.ps1 "https://filigran.jfrog.io/artifactory/openbas-agent/windows/openbas-agent-upgrade-service-user-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./target/release/openaev-agent.exe "https://filigran.jfrog.io/artifactory/openaev-agent/windows/arm64/openaev-agent-$env:version.exe"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer.exe "https://filigran.jfrog.io/artifactory/openaev-agent/windows/arm64/openaev-agent-installer-$env:version.exe"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-installer-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-upgrade-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-session-user.exe "https://filigran.jfrog.io/artifactory/openaev-agent/windows/arm64/openaev-agent-installer-session-user-$env:version.exe"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-session-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-installer-session-user-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade-session-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-upgrade-session-user-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-service-user.exe "https://filigran.jfrog.io/artifactory/openaev-agent/windows/arm64/openaev-agent-installer-service-user-$env:version.exe"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-service-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-installer-service-user-$env:version.ps1"
+            curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade-service-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-upgrade-service-user-$env:version.ps1"
       - run: |
           cargo install cargo-cache
           cargo-cache -a clean-unref
@@ -193,7 +193,7 @@ jobs:
       - run: cargo check
       - run: . "$HOME/.cargo/env"; cargo build --target=x86_64-unknown-linux-musl --release
       - run: . "$HOME/.cargo/env"; cargo test --release
-      - run: strip ./target/x86_64-unknown-linux-musl/release/openbas-agent
+      - run: strip ./target/x86_64-unknown-linux-musl/release/openaev-agent
       - run: |
           cargo install cargo-cache
           cargo-cache -a clean-unref
@@ -216,18 +216,18 @@ jobs:
       - run: . "$HOME/.cargo/env"; rustup target add x86_64-unknown-linux-musl
       - run: . "$HOME/.cargo/env"; cargo build --target=x86_64-unknown-linux-musl --release
       - run: . "$HOME/.cargo/env"; cargo test --release
-      - run: strip ./target/x86_64-unknown-linux-musl/release/openbas-agent
+      - run: strip ./target/x86_64-unknown-linux-musl/release/openaev-agent
       - run:
           name: push to jfrog
           command: |
             export version=${CIRCLE_TAG:-$( [ "$CIRCLE_BRANCH" = "main" ] && echo "latest" || echo "prerelease" )}
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./target/x86_64-unknown-linux-musl/release/openbas-agent "https://filigran.jfrog.io/artifactory/openbas-agent/linux/x86_64/openbas-agent-$version"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-installer-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-upgrade-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer-session-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-installer-session-user-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade-session-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-upgrade-session-user-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer-service-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-installer-service-user-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade-service-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-upgrade-service-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./target/x86_64-unknown-linux-musl/release/openaev-agent "https://filigran.jfrog.io/artifactory/openaev-agent/linux/x86_64/openaev-agent-$version"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-installer-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-upgrade-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer-session-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-installer-session-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade-session-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-upgrade-session-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-installer-service-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-upgrade-service-user-$version.sh"
       - run: |
           cargo install cargo-cache
           cargo-cache -a clean-unref
@@ -253,7 +253,7 @@ jobs:
       - run: cargo check
       - run: . "$HOME/.cargo/env"; cargo build --target=aarch64-unknown-linux-musl --release
       - run: . "$HOME/.cargo/env"; cargo test --release
-      - run: strip ./target/aarch64-unknown-linux-musl/release/openbas-agent
+      - run: strip ./target/aarch64-unknown-linux-musl/release/openaev-agent
       - run: |
           cargo install cargo-cache
           cargo-cache -a clean-unref
@@ -277,18 +277,18 @@ jobs:
       - run: . "$HOME/.cargo/env"; rustup target add aarch64-unknown-linux-musl
       - run: . "$HOME/.cargo/env"; cargo build --target=aarch64-unknown-linux-musl --release
       - run: . "$HOME/.cargo/env"; cargo test --release
-      - run: strip ./target/aarch64-unknown-linux-musl/release/openbas-agent
+      - run: strip ./target/aarch64-unknown-linux-musl/release/openaev-agent
       - run:
           name: push to jfrog
           command: |
             export version=${CIRCLE_TAG:-$( [ "$CIRCLE_BRANCH" = "main" ] && echo "latest" || echo "prerelease" )}
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./target/aarch64-unknown-linux-musl/release/openbas-agent "https://filigran.jfrog.io/artifactory/openbas-agent/linux/arm64/openbas-agent-$version"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-installer-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-upgrade-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer-session-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-installer-session-user-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade-session-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-upgrade-session-user-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer-service-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-installer-service-user-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade-service-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/linux/openbas-agent-upgrade-service-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./target/aarch64-unknown-linux-musl/release/openaev-agent "https://filigran.jfrog.io/artifactory/openaev-agent/linux/arm64/openaev-agent-$version"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-installer-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-upgrade-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer-session-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-installer-session-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade-session-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-upgrade-session-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-installer-service-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-upgrade-service-user-$version.sh"
       - run: |
           cargo install cargo-cache
           cargo-cache -a clean-unref
@@ -311,7 +311,7 @@ jobs:
       - run: cargo check
       - run: . "$HOME/.cargo/env"; cargo build --release
       - run: . "$HOME/.cargo/env"; cargo test --release
-      - run: strip ./target/release/openbas-agent
+      - run: strip ./target/release/openaev-agent
       - run: |
           cargo install cargo-cache
           cargo-cache -a clean-unref
@@ -332,18 +332,18 @@ jobs:
       - run: curl https://sh.rustup.rs -sSf | sh -s -- -y
       - run: . "$HOME/.cargo/env"; cargo build --release
       - run: . "$HOME/.cargo/env"; cargo test --release
-      - run: strip ./target/release/openbas-agent
+      - run: strip ./target/release/openaev-agent
       - run:
           name: push to jfrog
           command: |
             export version=${CIRCLE_TAG:-$( [ "$CIRCLE_BRANCH" = "main" ] && echo "latest" || echo "prerelease" )}
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./target/release/openbas-agent "https://filigran.jfrog.io/artifactory/openbas-agent/macos/arm64/openbas-agent-$version"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-installer.sh "https://filigran.jfrog.io/artifactory/openbas-agent/macos/openbas-agent-installer-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-upgrade.sh "https://filigran.jfrog.io/artifactory/openbas-agent/macos/openbas-agent-upgrade-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-installer-session-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/macos/openbas-agent-installer-session-user-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-upgrade-session-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/macos/openbas-agent-upgrade-session-user-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-installer-service-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/macos/openbas-agent-installer-service-user-$version.sh"
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-upgrade-service-user.sh "https://filigran.jfrog.io/artifactory/openbas-agent/macos/openbas-agent-upgrade-service-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./target/release/openaev-agent "https://filigran.jfrog.io/artifactory/openaev-agent/macos/arm64/openaev-agent-$version"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-installer.sh "https://filigran.jfrog.io/artifactory/openaev-agent/macos/openaev-agent-installer-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-upgrade.sh "https://filigran.jfrog.io/artifactory/openaev-agent/macos/openaev-agent-upgrade-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-installer-session-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/macos/openaev-agent-installer-session-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-upgrade-session-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/macos/openaev-agent-upgrade-session-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-installer-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/macos/openaev-agent-installer-service-user-$version.sh"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-upgrade-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/macos/openaev-agent-upgrade-service-user-$version.sh"
       - run: |
           cargo install cargo-cache
           cargo-cache -a clean-unref
@@ -353,7 +353,7 @@ jobs:
             - ~/.cargo
   macos_x86_64_compile:
     machine: true
-    resource_class: openbas-platform/openbas-agent-macos-64bits-x86
+    resource_class: openaev-platform/openaev-agent-macos-64bits-x86
     steps:
       - checkout
       - restore_cache:
@@ -372,7 +372,7 @@ jobs:
       - run: cargo check
       - run: . "$HOME/.cargo/env"; cargo build --release
       - run: . "$HOME/.cargo/env"; cargo test --release
-      - run: strip ./target/release/openbas-agent
+      - run: strip ./target/release/openaev-agent
       - run: |
           cargo install --force cargo-cache
           cargo-cache -a clean-unref
@@ -382,7 +382,7 @@ jobs:
             - ~/.cargo
   macos_x86_64_build:
     machine: true
-    resource_class: openbas-platform/openbas-agent-macos-64bits-x86
+    resource_class: openaev-platform/openaev-agent-macos-64bits-x86
     steps:
       - checkout
       - restore_cache:
@@ -394,12 +394,12 @@ jobs:
       - run: rustup default stable-x86_64-apple-darwin
       - run: . "$HOME/.cargo/env"; cargo build --release
       - run: . "$HOME/.cargo/env"; cargo test --release
-      - run: strip ./target/release/openbas-agent
+      - run: strip ./target/release/openaev-agent
       - run:
           name: push to jfrog
           command: |
             export version=${CIRCLE_TAG:-$( [ "$CIRCLE_BRANCH" = "main" ] && echo "latest" || echo "prerelease" )}
-            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./target/release/openbas-agent "https://filigran.jfrog.io/artifactory/openbas-agent/macos/x86_64/openbas-agent-$version"
+            curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./target/release/openaev-agent "https://filigran.jfrog.io/artifactory/openaev-agent/macos/x86_64/openaev-agent-$version"
       - run: |
           cargo install --force cargo-cache
           cargo-cache -a clean-unref
@@ -408,7 +408,7 @@ jobs:
           paths:
             - ~/.cargo
 workflows:
-  openbas-agent:
+  openaev-agent:
     jobs:
       - windows_x86_64_compile:
           filters:

@@ -3,11 +3,11 @@ use serde::Deserialize;
 use std::env;
 
 const ENV_PRODUCTION: &str = "production";
-const ENV_PRODUCTION_CONFIG_FILE: &str = "openbas-agent-config";
+const ENV_PRODUCTION_CONFIG_FILE: &str = "openaev-agent-config";
 
 #[derive(Debug, Deserialize)]
 #[allow(unused)]
-pub struct OpenBAS {
+pub struct OpenAEV {
     pub url: String,
     pub token: String,
     pub unsecured_certificate: bool,
@@ -20,7 +20,7 @@ pub struct OpenBAS {
 #[allow(unused)]
 pub struct Settings {
     pub debug: bool,
-    pub openbas: OpenBAS,
+    pub openaev: OpenAEV,
 }
 
 impl Settings {
@@ -30,7 +30,7 @@ impl Settings {
 
     pub fn new() -> Result<Self, ConfigError> {
         let run_mode = Self::mode();
-        let config = Config::builder().add_source(Environment::with_prefix("openbas"));
+        let config = Config::builder().add_source(Environment::with_prefix("openaev"));
         if run_mode == ENV_PRODUCTION {
             // Get the current executable path
             let current_exe_patch = env::current_exe().unwrap();
