@@ -93,7 +93,7 @@ impl ExecutionDetails {
                     .split("\n")
                     .next()
                     .unwrap()
-                    .contains("openbas-agent.service"),
+                    .contains("openaev-agent.service"),
                 executed_by_user: user,
             })
         }
@@ -115,13 +115,13 @@ impl ExecutionDetails {
             let is_elevated = Self::decode_output(&is_elevated_output.unwrap().clone().stdout);
             let is_service_output = Self::invoke_command(
                 executor,
-                "launchctl print gui/$(id -u)/openbas-agent-session",
+                "launchctl print gui/$(id -u)/openaev-agent-session",
                 args.as_slice(),
             );
             let is_service = Self::decode_output(&is_service_output.unwrap().clone().stdout);
             Ok(ExecutionDetails {
                 is_elevated: is_elevated.contains("(admin)"),
-                is_service: !is_service.contains("openbas-agent-session"),
+                is_service: !is_service.contains("openaev-agent-session"),
                 executed_by_user: user,
             })
         }

@@ -9,9 +9,9 @@ ${Using:StrFunc} StrCase
 !insertmacro GetParameters
 !insertmacro GetOptions
 
-!define APPNAME "OBAS Agent"
+!define APPNAME "OAEV Agent"
 !define COMPANYNAME "Filigran"
-!define DESCRIPTION "Filigran's agent for OpenBAS"
+!define DESCRIPTION "Filigran's agent for OpenAEV"
 # These will be displayed by the "Click here for support information" link in "Add/Remove Programs"
 # It is possible to use "mailto:" links in here to open the email client
 !define HELPURL "https://filigran.io/" # "Support Information" link
@@ -24,7 +24,7 @@ RequestExecutionLevel user
 LicenseData "license.txt"
 # This will be in the installer/uninstaller's title bar
 Name "${COMPANYNAME} - ${APPNAME}"
-Icon "openbas.ico"
+Icon "openaev.ico"
 outFile "agent-installer-session-user.exe"
  
 ; page definition
@@ -242,7 +242,7 @@ function .onInit
     Push $R0
     Pop $1
 
-    StrCpy $0 "OPENBAS_URL"
+    StrCpy $0 "OPENAEV_URL"
     Call ExtractParameter
     StrCpy $ConfigURL $0
 
@@ -272,7 +272,7 @@ function .onInit
 
     ; Set defaults if not provided
     ${If} $ConfigServiceName == ""
-        StrCpy $ConfigServiceName "OBASAgent-Session"
+        StrCpy $ConfigServiceName "OAEVAgent-Session"
     ${EndIf}
     ${If} $ConfigInstallDir == ""
         StrCpy $ConfigInstallDir "C:\${COMPANYNAME}"
@@ -324,7 +324,7 @@ Function nsDialogsConfig
 		Abort
 	${EndIf}
 
-  ${NSD_CreateLabel} 0 0 100% 12u "OpenBAS URL *"
+  ${NSD_CreateLabel} 0 0 100% 12u "OpenAEV URL *"
 	Pop $LabelURL
 	${NSD_CreateText} 0 12u 100% 12u "http://localhost:3001"
 	Pop $ConfigURLForm
@@ -446,14 +446,14 @@ section "install"
   # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
   setOutPath $INSTDIR
   # Files added here should be removed by the uninstaller (see section "uninstall")
-  file "..\..\target\release\openbas-agent.exe"
-  file "openbas.ico"
+  file "..\..\target\release\openaev-agent.exe"
+  file "openaev.ico"
 	
   ; write agent config file
-  FileOpen $4 "$INSTDIR\openbas-agent-config.toml" w
+  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "$\r$\n"
-    FileWrite $4 "[openbas]$\r$\n"
+    FileWrite $4 "[openaev]$\r$\n"
     FileWrite $4 "url = $\"$ConfigURL$\"$\r$\n"
     FileWrite $4 "token = $\"$ConfigToken$\"$\r$\n"
     FileWrite $4 "unsecured_certificate = $ConfigUnsecuredCertificate$\r$\n"
@@ -465,8 +465,8 @@ section "install"
   FileClose $4
 
   ; write agent start file to launch the agent without a powershell window displayed
-  FileOpen $4 "$INSTDIR\openbas_agent_start.ps1" w
-    FileWrite $4 "Start-Process -FilePath '$INSTDIR\openbas-agent.exe' -WindowStyle Hidden"
+  FileOpen $4 "$INSTDIR\openaev_agent_start.ps1" w
+    FileWrite $4 "Start-Process -FilePath '$INSTDIR\openaev-agent.exe' -WindowStyle Hidden"
   FileClose $4
 
   ;admin -> use a scheduled task, non admin -> write in the registry and create a script to launch the agent to create a startup app
@@ -478,7 +478,7 @@ section "install"
     ExecWait 'schtasks /Delete /TN "$AgentName" /F' $0
 
     ; Create the task
-    ExecWait 'schtasks /Create /TN "$AgentName" /TR "powershell.exe -ExecutionPolicy Bypass -WindowStyle hidden -File $INSTDIR\openbas_agent_start.ps1" /SC ONLOGON /RL HIGHEST' $0
+    ExecWait 'schtasks /Create /TN "$AgentName" /TR "powershell.exe -ExecutionPolicy Bypass -WindowStyle hidden -File $INSTDIR\openaev_agent_start.ps1" /SC ONLOGON /RL HIGHEST' $0
 
     ;start the task
     ExecWait 'schtasks /Run /TN "$AgentName"' $0
@@ -490,10 +490,10 @@ section "install"
     DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "$AgentName"
 
     ;Write in the registry to start the agent at logon
-    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "$AgentName" "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -WindowStyle hidden -File $INSTDIR\openbas_agent_start.ps1"
+    WriteRegStr HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "$AgentName" "C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe -ExecutionPolicy Bypass -WindowStyle hidden -File $INSTDIR\openaev_agent_start.ps1"
 
     ;Start the agent
-    nsExec::ExecToStack "powershell.exe -ExecutionPolicy Bypass -WindowStyle hidden -File $INSTDIR\openbas_agent_start.ps1"
+    nsExec::ExecToStack "powershell.exe -ExecutionPolicy Bypass -WindowStyle hidden -File $INSTDIR\openaev_agent_start.ps1"
   ${EndIf}
 
   # Uninstaller - See function un.onInit and section "uninstall" for configuration
@@ -503,7 +503,7 @@ sectionEnd
 # Uninstaller
 Function un.ReadServiceNameFromToml
     StrCpy $AgentName "" ; Reset
-    FileOpen $0 "$INSTDIR\openbas-agent-config.toml" r
+    FileOpen $0 "$INSTDIR\openaev-agent-config.toml" r
 
 read_loop:
     FileRead $0 $1
@@ -661,9 +661,9 @@ section "uninstall"
      ExecWait 'schtasks /Delete /TN "$AgentName" /F' $0
    ${Else}
      ; Try by name first
-     ExecWait '"taskkill.exe" /F /IM openbas-agent.exe'
+     ExecWait '"taskkill.exe" /F /IM openaev-agent.exe'
      ; Then try PowerShell with wildcard
-     ExecWait '"powershell.exe" -ExecutionPolicy Bypass -WindowStyle hidden -Command "Get-Process | Where-Object { $$_.Path -like \"*openbas-agent*\" } | Stop-Process -Force"'
+     ExecWait '"powershell.exe" -ExecutionPolicy Bypass -WindowStyle hidden -Command "Get-Process | Where-Object { $$_.Path -like \"*openaev-agent*\" } | Stop-Process -Force"'
 
      SetRegView 64
      ; Remove registry entry

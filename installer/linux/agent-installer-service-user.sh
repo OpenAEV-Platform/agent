@@ -46,19 +46,19 @@ if ! getent group "$GROUP_ARG" >/dev/null 2>&1; then
   exit 1
 fi
 
-base_url=${OPENBAS_URL}
+base_url=${OPENAEV_URL}
 architecture=$(uname -m)
 user="$USER_ARG"
 group="$GROUP_ARG"
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
 systemd_status=$(systemctl is-system-running)
-install_dir="$HOME/${OPENBAS_INSTALL_DIR}-${user}"
-service_name="${user}-${OPENBAS_SERVICE_NAME}"
+install_dir="$HOME/${OPENAEV_INSTALL_DIR}-${user}"
+service_name="${user}-${OPENAEV_SERVICE_NAME}"
 
 
 if [ "${os}" != "linux" ]; then
-  echo "Operating system $OSTYPE is not supported yet, please create a ticket in openbas github project"
+  echo "Operating system $OSTYPE is not supported yet, please create a ticket in openaev github project"
   exit 1
 fi
 
@@ -74,34 +74,34 @@ echo "Starting install script for ${os} | ${architecture}"
 echo "01. Stopping existing ${service_name}..."
 systemctl stop ${service_name} || echo "Fail stopping ${service_name}"
 
-echo "02. Downloading OpenBAS Agent into ${install_dir}..."
+echo "02. Downloading OpenAEV Agent into ${install_dir}..."
 (mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
-curl -sSfL ${base_url}/api/agent/executable/openbas/${os}/${architecture} -o ${install_dir}/openbas-agent
-chmod +x ${install_dir}/openbas-agent
+curl -sSfL ${base_url}/api/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+chmod +x ${install_dir}/openaev-agent
 
-echo "03. Creating OpenBAS configuration file"
-cat > ${install_dir}/openbas-agent-config.toml <<EOF
+echo "03. Creating OpenAEV configuration file"
+cat > ${install_dir}/openaev-agent-config.toml <<EOF
 debug=false
 
-[openbas]
-url = "${OPENBAS_URL}"
-token = "${OPENBAS_TOKEN}"
-unsecured_certificate = "${OPENBAS_UNSECURED_CERTIFICATE}"
-with_proxy = "${OPENBAS_WITH_PROXY}"
+[openaev]
+url = "${OPENAEV_URL}"
+token = "${OPENAEV_TOKEN}"
+unsecured_certificate = "${OPENAEV_UNSECURED_CERTIFICATE}"
+with_proxy = "${OPENAEV_WITH_PROXY}"
 installation_mode = "service-user"
-service_name = "${OPENBAS_SERVICE_NAME}"
+service_name = "${OPENAEV_SERVICE_NAME}"
 EOF
 
 echo "04. Writing agent service"
 cat > ${install_dir}/${service_name}.service <<EOF
 [Unit]
-Description=OpenBAS Agent Service ${user}
+Description=OpenAEV Agent Service ${user}
 After=network.target
 [Service]
 User=${user}
 Group=${group}
 Type=exec
-ExecStart=${install_dir}/openbas-agent
+ExecStart=${install_dir}/openaev-agent
 StandardOutput=journal
 Restart=always
 RestartSec=60
@@ -116,6 +116,6 @@ echo "05. Starting agent service"
   systemctl daemon-reload
   systemctl enable ${service_name}
   systemctl start ${service_name}
-) || (echo "Error while enabling OpenBAS Agent systemd unit file or starting the agent" >&2 && exit 1)
+) || (echo "Error while enabling OpenAEV Agent systemd unit file or starting the agent" >&2 && exit 1)
 
-echo "OpenBAS Agent started."
+echo "OpenAEV Agent started."

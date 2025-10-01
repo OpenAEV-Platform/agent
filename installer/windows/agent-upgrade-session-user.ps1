@@ -11,7 +11,7 @@ switch ($env:PROCESSOR_ARCHITECTURE)
         }
     }
 }
-if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR_ARCHITECTURE is not supported yet, please create a ticket in openbas github project" }
+if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR_ARCHITECTURE is not supported yet, please create a ticket in openaev github project" }
 function Sanitize-UserName {
     param(
         [Parameter(Mandatory = $true)]
@@ -21,14 +21,14 @@ function Sanitize-UserName {
     $pattern = '[\/\\:\*\?<>\|]'
     return ($UserName -replace $pattern, '')
 }
-$BasePath = "${OPENBAS_INSTALL_DIR}";
+$BasePath = "${OPENAEV_INSTALL_DIR}";
 $User = whoami;
 $SanitizedUser =  Sanitize-UserName -UserName $user;
 $isElevated = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($isElevated) {
-    $AgentName = "${OPENBAS_SERVICE_NAME}-Administrator-$SanitizedUser"
+    $AgentName = "${OPENAEV_SERVICE_NAME}-Administrator-$SanitizedUser"
 } else {
-    $AgentName = "${OPENBAS_SERVICE_NAME}-$SanitizedUser"
+    $AgentName = "${OPENAEV_SERVICE_NAME}-$SanitizedUser"
 }
 
 if ($BasePath -like "*$AgentName*") {
@@ -41,11 +41,11 @@ if ($BasePath -like "*$AgentName*") {
     $InstallDir = $BasePath + "\" + $AgentName
 }
 
-$AgentPath = $InstallDir + "\openbas-agent.exe";
+$AgentPath = $InstallDir + "\openaev-agent.exe";
 
 Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
-Invoke-WebRequest -Uri "${OPENBAS_URL}/api/agent/package/openbas/windows/${architecture}/session-user" -OutFile "openbas-installer-session-user.exe";
+Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/package/openaev/windows/${architecture}/session-user" -OutFile "openaev-installer-session-user.exe";
 
-./openbas-installer-session-user.exe /S ~OPENBAS_URL="${OPENBAS_URL}" ~ACCESS_TOKEN="${OPENBAS_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENBAS_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENBAS_WITH_PROXY} ~SERVICE_NAME="${OPENBAS_SERVICE_NAME}" ~INSTALL_DIR="$CleanBasePath";
+./openaev-installer-session-user.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$CleanBasePath";
 
-rm -force ./openbas-installer-session-user.exe;
+rm -force ./openaev-installer-session-user.exe;

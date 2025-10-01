@@ -1,12 +1,12 @@
 #!/bin/sh
 set -e
 
-base_url=${OPENBAS_URL}
+base_url=${OPENAEV_URL}
 architecture=$(uname -m)
 user="$(id -un)"
 group="$(id -gn)"
 
-install_dir="${OPENBAS_INSTALL_DIR}-${user}"
+install_dir="${OPENAEV_INSTALL_DIR}-${user}"
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
 if [ "${os}" = "darwin" ]; then
@@ -14,31 +14,31 @@ if [ "${os}" = "darwin" ]; then
 fi
 
 if [ "${os}" != "macos" ]; then
-  echo "Operating system $OSTYPE is not supported yet, please create a ticket in openbas github project"
+  echo "Operating system $OSTYPE is not supported yet, please create a ticket in openaev github project"
   exit 1
 fi
 
 echo "Starting upgrade script for ${os} | ${architecture}"
 
-echo "01. Downloading OpenBAS Agent into ${install_dir}..."
+echo "01. Downloading OpenAEV Agent into ${install_dir}..."
 (mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
-curl -sSfL ${base_url}/api/agent/executable/openbas/${os}/${architecture} -o ${install_dir}/openbas-agent_upgrade
-mv ${install_dir}/openbas-agent_upgrade ${install_dir}/openbas-agent
-chmod +x ${install_dir}/openbas-agent
+curl -sSfL ${base_url}/api/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
+chmod +x ${install_dir}/openaev-agent
 
-echo "02. Updating OpenBAS configuration file"
-cat > ${install_dir}/openbas-agent-config.toml <<EOF
+echo "02. Updating OpenAEV configuration file"
+cat > ${install_dir}/openaev-agent-config.toml <<EOF
 debug=false
 
-[openbas]
-url = "${OPENBAS_URL}"
-token = "${OPENBAS_TOKEN}"
-unsecured_certificate = "${OPENBAS_UNSECURED_CERTIFICATE}"
-with_proxy = "${OPENBAS_WITH_PROXY}"
+[openaev]
+url = "${OPENAEV_URL}"
+token = "${OPENAEV_TOKEN}"
+unsecured_certificate = "${OPENAEV_UNSECURED_CERTIFICATE}"
+with_proxy = "${OPENAEV_WITH_PROXY}"
 installation_mode = "service-user"
-service_name = "${OPENBAS_SERVICE_NAME}"
+service_name = "${OPENAEV_SERVICE_NAME}"
 EOF
 
 echo "03. Kill the process of the existing service"
-(pkill -9 -f "${install_dir}/openbas-agent") || (echo "Error while killing the process of the openbas agent service" >&2 && exit 1)
-echo "The OpenBAS agent process was stopped, the service will automatically restart in 60 seconds"
+(pkill -9 -f "${install_dir}/openaev-agent") || (echo "Error while killing the process of the openaev agent service" >&2 && exit 1)
+echo "The OpenAEV agent process was stopped, the service will automatically restart in 60 seconds"

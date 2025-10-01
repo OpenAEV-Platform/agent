@@ -26,7 +26,7 @@ use crate::windows::service::service_stub;
 
 pub static THREADS_CONTROL: AtomicBool = AtomicBool::new(true);
 const VERSION: &str = env!("CARGO_PKG_VERSION");
-const PREFIX_LOG_NAME: &str = "openbas-agent.log";
+const PREFIX_LOG_NAME: &str = "openaev-agent.log";
 
 // Get and log all errors from the agent execution
 pub fn set_error_hook() {
@@ -59,12 +59,12 @@ fn compute_working_dir() -> PathBuf {
 }
 
 fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHandle<()>>, Error> {
-    let url = settings_data.openbas.url;
-    let token = settings_data.openbas.token;
-    let unsecured_certificate = settings_data.openbas.unsecured_certificate;
-    let with_proxy = settings_data.openbas.with_proxy;
-    let installation_mode = settings_data.openbas.installation_mode;
-    let service_name = settings_data.openbas.service_name;
+    let url = settings_data.openaev.url;
+    let token = settings_data.openaev.token;
+    let unsecured_certificate = settings_data.openaev.unsecured_certificate;
+    let with_proxy = settings_data.openaev.with_proxy;
+    let installation_mode = settings_data.openaev.installation_mode;
+    let service_name = settings_data.openaev.service_name;
     let execution_details = ExecutionDetails::new(is_service).unwrap();
     info!(
         "ExecutionDetails : user {:?} -- is_elevated {:?} -- is_service {:?} ",
@@ -119,7 +119,7 @@ fn main() -> Result<(), Error> {
         .init();
     // endregion
     // region Process execution
-    info!("Starting OpenBAS agent {} ({})", VERSION, Settings::mode());
+    info!("Starting OpenAEV agent {} ({})", VERSION, Settings::mode());
     let settings = Settings::new();
     let settings_data = settings.unwrap();
     if service_stub::is_windows_service() {

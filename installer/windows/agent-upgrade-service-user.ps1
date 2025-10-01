@@ -22,12 +22,12 @@ function Sanitize-UserName {
     return ($UserName -replace $pattern, '')
 }
 
-if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR_ARCHITECTURE is not supported yet, please create a ticket in openbas github project" }
+if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR_ARCHITECTURE is not supported yet, please create a ticket in openaev github project" }
 
-$BasePath = "${OPENBAS_INSTALL_DIR}";
+$BasePath = "${OPENAEV_INSTALL_DIR}";
 $User = whoami;
 $SanitizedUser = Sanitize-UserName -UserName $user;
-$ServiceName = "${OPENBAS_SERVICE_NAME}";
+$ServiceName = "${OPENAEV_SERVICE_NAME}";
 $AgentName = "$ServiceName-$SanitizedUser";
 
 if ($BasePath -match "\\$ServiceName-[^\\]+$" -or $BasePath -match "/$ServiceName-[^/]+$") {
@@ -39,10 +39,10 @@ if ($BasePath -match "\\$ServiceName-[^\\]+$" -or $BasePath -match "/$ServiceNam
     $InstallDir = $BasePath + $AgentName
 }
 
-$AgentPath = $InstallDir + "\openbas-agent.exe";
-$AgentUpgradedPath = $InstallDir + "\openbas-agent_upgrade.exe";
+$AgentPath = $InstallDir + "\openaev-agent.exe";
+$AgentUpgradedPath = $InstallDir + "\openaev-agent_upgrade.exe";
 
-Invoke-WebRequest -Uri "${OPENBAS_URL}/api/agent/executable/openbas/windows/${architecture}" -OutFile $AgentUpgradedPath;
+Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/executable/openaev/windows/${architecture}" -OutFile $AgentUpgradedPath;
 
 sc.exe stop $AgentName;
 

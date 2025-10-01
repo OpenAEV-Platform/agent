@@ -30,7 +30,7 @@ jobs:
       - name: checkout repo content
         uses: actions/checkout@v4
         with:
-          repository: OpenBAS-Platform/agent
+          repository: OpenAEV-Platform/agent
           ref: ${{ inputs.branch_agent }}
       - name: setup python
         uses: actions/setup-python@v5

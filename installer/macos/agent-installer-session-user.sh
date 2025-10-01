@@ -1,11 +1,11 @@
 #!/bin/sh
 set -e
 
-base_url=${OPENBAS_URL}
+base_url=${OPENAEV_URL}
 architecture=$(uname -m)
 
-install_dir="/Users/$(id -un)/${OPENBAS_INSTALL_DIR}"
-session_name="${OPENBAS_SERVICE_NAME}"
+install_dir="/Users/$(id -un)/${OPENAEV_INSTALL_DIR}"
+session_name="${OPENAEV_SERVICE_NAME}"
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
 if [ "${os}" = "darwin" ]; then
@@ -13,7 +13,7 @@ if [ "${os}" = "darwin" ]; then
 fi
 
 if [ "${os}" != "macos" ]; then
-  echo "Operating system $OSTYPE is not supported yet, please create a ticket in openbas github project"
+  echo "Operating system $OSTYPE is not supported yet, please create a ticket in openaev github project"
   exit 1
 fi
 
@@ -22,22 +22,22 @@ echo "Starting install script for ${os} | ${architecture}"
 echo "01. Stopping existing ${session_name}..."
 launchctl bootout gui/$(id -u) ~/Library/LaunchAgents/${session_name}.plist || echo "${session_name} already stopped"
 
-echo "02. Downloading OpenBAS Agent into ${install_dir}..."
+echo "02. Downloading OpenAEV Agent into ${install_dir}..."
 (mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
-curl -sSfL ${base_url}/api/agent/executable/openbas/${os}/${architecture} -o ${install_dir}/openbas-agent
-chmod +x ${install_dir}/openbas-agent
+curl -sSfL ${base_url}/api/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+chmod +x ${install_dir}/openaev-agent
 
-echo "03. Creating OpenBAS configuration file"
-cat > ${install_dir}/openbas-agent-config.toml <<EOF
+echo "03. Creating OpenAEV configuration file"
+cat > ${install_dir}/openaev-agent-config.toml <<EOF
 debug=false
 
-[openbas]
-url = "${OPENBAS_URL}"
-token = "${OPENBAS_TOKEN}"
-unsecured_certificate = "${OPENBAS_UNSECURED_CERTIFICATE}"
-with_proxy = "${OPENBAS_WITH_PROXY}"
+[openaev]
+url = "${OPENAEV_URL}"
+token = "${OPENAEV_TOKEN}"
+unsecured_certificate = "${OPENAEV_UNSECURED_CERTIFICATE}"
+with_proxy = "${OPENAEV_WITH_PROXY}"
 installation_mode = "session-user"
-service_name = "${OPENBAS_SERVICE_NAME}"
+service_name = "${OPENAEV_SERVICE_NAME}"
 EOF
 
 echo "04. Writing agent service"
@@ -51,7 +51,7 @@ cat > ~/Library/LaunchAgents/io.filigran.${session_name}.plist <<EOF
         <string>io.filigran.${session_name}</string>
 
         <key>Program</key>
-        <string>${install_dir}/openbas-agent</string>
+        <string>${install_dir}/openaev-agent</string>
 
         <key>RunAtLoad</key>
         <true/>
@@ -84,4 +84,4 @@ echo "05. Starting agent service"
 launchctl enable gui/$(id -u)/io.filigran.${session_name}
 launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.filigran.${session_name}.plist
 
-echo "OpenBAS Agent Session User started."
+echo "OpenAEV Agent Session User started."
