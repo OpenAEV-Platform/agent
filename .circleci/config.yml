@@ -87,7 +87,7 @@ jobs:
             - ~/.cargo
   windows_arm_64_compile:
     machine: true
-    resource_class: openaev-platform/openaev-agent-windows-64bits-arm
+    resource_class: openbas-platform/openbas-agent-windows-64bits-arm
     shell: 'powershell.exe -ExecutionPolicy Bypass'
     steps:
       - checkout
@@ -119,7 +119,7 @@ jobs:
             - ~/.cargo
   windows_arm_64_build:
     machine: true
-    resource_class: openaev-platform/openaev-agent-windows-64bits-arm
+    resource_class: openbas-platform/openbas-agent-windows-64bits-arm
     shell: 'powershell.exe -ExecutionPolicy Bypass'
     steps:
       - checkout
@@ -353,7 +353,7 @@ jobs:
             - ~/.cargo
   macos_x86_64_compile:
     machine: true
-    resource_class: openaev-platform/openaev-agent-macos-64bits-x86
+    resource_class: openbas-platform/openbas-agent-macos-64bits-x86
     steps:
       - checkout
       - restore_cache:
@@ -382,7 +382,7 @@ jobs:
             - ~/.cargo
   macos_x86_64_build:
     machine: true
-    resource_class: openaev-platform/openaev-agent-macos-64bits-x86
+    resource_class: openbas-platform/openbas-agent-macos-64bits-x86
     steps:
       - checkout
       - restore_cache:
