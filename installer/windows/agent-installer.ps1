@@ -22,13 +22,13 @@ echo "Downloading and installing OpenAEV Agent..."
 try {
     Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/package/openaev/windows/${architecture}/service" -OutFile "openaev-installer.exe";
     ./openaev-installer.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" | Out-Null;
-
 	echo "OpenAEV agent has been successfully installed"
 } catch {
     echo "Installation failed"
   	if ((Get-Host).Version.Major -lt 7) { throw "PowerShell 7 or higher is required for installation" }
   	else { echo $_ }
 } finally {
+    Start-Sleep -Seconds 1
     rm -force ./openaev-installer.exe;
   	if ($location -like "*C:\Windows\System32*") { cd C:\Windows\System32 }
 }

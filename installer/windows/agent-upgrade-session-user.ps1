@@ -62,6 +62,7 @@ Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"
 & "${UninstallDir}/uninstall.exe" /S | Out-Null
 Start-Sleep -Seconds 1
+cd $HOME
 iex (iwr "${OPENAEV_URL}/api/agent/installer/openaev/windows/session-user/${OPENAEV_TOKEN}").Content
 }
 Start-Sleep -Seconds 1
