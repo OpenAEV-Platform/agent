@@ -43,9 +43,26 @@ if ($BasePath -like "*$AgentName*") {
 
 $AgentPath = $InstallDir + "\openaev-agent.exe";
 
+
+
+# Manage the renaming OpenBAS -> OpenAEV ...
+if(Test-Path "${OPENAEV_INSTALL_DIR}")
+{
+# Upgrade the agent if the folder *openaev* exists
 Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
 Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/package/openaev/windows/${architecture}/session-user" -OutFile "openaev-installer-session-user.exe";
-
 ./openaev-installer-session-user.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$CleanBasePath";
-
+}
+else
+{
+# Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
+$AgentPath = $AgentPath -replace "openaev", "openbas"
+$AgentPath = $AgentPath -replace "OAEV", "OBAS"
+Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
+$UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"
+& "${UninstallDir}/uninstall.exe" /S | Out-Null
+Start-Sleep -Seconds 1
+iex (iwr "${OPENAEV_URL}/api/agent/installer/openaev/windows/session-user/${OPENAEV_TOKEN}").Content
+}
+Start-Sleep -Seconds 1
 rm -force ./openaev-installer-session-user.exe;

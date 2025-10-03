@@ -604,7 +604,7 @@ Function un.onInit
     Call un.ReadServiceNameFromToml
 
     #Verify the uninstaller - last chance to back out
-    MessageBox MB_OKCANCEL "Permanently remove ${APPNAME}?" IDOK continue
+    MessageBox MB_OKCANCEL "Permanently remove ${APPNAME}?" /SD IDOK IDOK continue
     Abort
 
 continue:
