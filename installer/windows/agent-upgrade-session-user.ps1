@@ -43,9 +43,37 @@ if ($BasePath -like "*$AgentName*") {
 
 $AgentPath = $InstallDir + "\openaev-agent.exe";
 
+# Manage the renaming OpenBAS -> OpenAEV ...
+$OpenAEVPath = "${OPENAEV_INSTALL_DIR}" -replace "openbas", "openaev"
+$OpenAEVPath = "${OPENAEV_INSTALL_DIR}" -replace "OBAS", "OAEV"
+if(Test-Path "$OpenAEVPath")
+{
+# Upgrade the agent if the folder *openaev* exists
 Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
 Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/package/openaev/windows/${architecture}/session-user" -OutFile "openaev-installer-session-user.exe";
-
 ./openaev-installer-session-user.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$CleanBasePath";
-
+}
+else
+{
+# Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
+$AgentPath = $AgentPath -replace "openaev", "openbas"
+$AgentPath = $AgentPath -replace "OAEV", "OBAS"
+Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
+$UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"
+$UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "OAEV", "OBAS"
+rm -Force "${UninstallDir}/openbas.ico"
+rm -Force "${UninstallDir}/openbas_agent_kill.ps1"
+rm -Force "${UninstallDir}/openbas_agent_start.ps1"
+rm -Force "${UninstallDir}/openbas-agent.exe"
+rm -Force "${UninstallDir}/openbas-agent-config.toml"
+rm -Force "${UninstallDir}/uninstall.exe"
+if ($isElevated) {
+    schtasks.exe /End /TN "$AgentName"
+    schtasks.exe /Delete /TN "$AgentName" /F
+} else {
+    Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "$AgentName"
+}
+iex (iwr "${OPENAEV_URL}/api/agent/installer/openaev/windows/session-user/${OPENAEV_TOKEN}").Content
+}
+Start-Sleep -Seconds 1
 rm -force ./openaev-installer-session-user.exe;
