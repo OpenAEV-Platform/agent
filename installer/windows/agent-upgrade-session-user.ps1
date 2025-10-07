@@ -56,6 +56,7 @@ Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/package/openaev/windows/${archi
 else
 {
 # Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
+iex (iwr "${OPENAEV_URL}/api/agent/installer/openaev/windows/session-user/${OPENAEV_TOKEN}").Content
 $AgentPath = $AgentPath -replace "openaev", "openbas"
 $AgentPath = $AgentPath -replace "OAEV", "OBAS"
 Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
@@ -73,7 +74,6 @@ if ($isElevated) {
 } else {
     Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "$AgentName"
 }
-iex (iwr "${OPENAEV_URL}/api/agent/installer/openaev/windows/session-user/${OPENAEV_TOKEN}").Content
 }
 Start-Sleep -Seconds 1
 rm -force ./openaev-installer-session-user.exe;
