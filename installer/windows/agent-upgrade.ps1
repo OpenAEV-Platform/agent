@@ -24,6 +24,7 @@ Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/package/openaev/windows/${archi
 else
 {
 # Uninstall the old named agent *OBAS* and install the new named agent *OAEV* if the folder OAEV doesn't exist
+iex (iwr "${OPENAEV_URL}/api/agent/installer/openaev/windows/service/${OPENAEV_TOKEN}").Content
 sc.exe stop "${OPENAEV_SERVICE_NAME}"
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "OAEV", "OBAS"
@@ -33,7 +34,6 @@ rm -Force "${UninstallDir}/openbas-agent.exe"
 rm -Force "${UninstallDir}/openbas-agent-config.toml"
 rm -Force "${UninstallDir}/uninstall.exe"
 sc.exe delete "${OPENAEV_SERVICE_NAME}"
-iex (iwr "${OPENAEV_URL}/api/agent/installer/openaev/windows/service/${OPENAEV_TOKEN}").Content
 }
 Start-Sleep -Seconds 1
 rm -force ./openaev-installer.exe;
