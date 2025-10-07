@@ -19,6 +19,11 @@ fi
 
 echo "Starting upgrade script for ${os} | ${architecture}"
 
+# Manage the renaming OpenBAS -> OpenAEV ...
+openaev_dir=$(printf %s "${install_dir}" | sed 's/openbas/openaev/g')
+if [ -d "$openaev_dir" ]; then
+# Upgrade the agent if the folder *openaev* exists
+
 echo "01. Downloading OpenAEV Agent into ${install_dir}..."
 (mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
 curl -sSfL ${base_url}/api/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
@@ -41,5 +46,24 @@ EOF
 echo "03. Restarting agent service"
 launchctl kickstart -k system/io.filigran.${service_name}
 launchctl bootstrap system /Library/LaunchDaemons/io.filigran.${service_name}.plist
+
+else
+# Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
+echo "01. Installing OpenAEV Agent..."
+curl -s ${base_url}/api/agent/installer/openaev/${os}/service/${OPENAEV_TOKEN} | sh
+
+echo "02. Uninstalling OpenBAS Agent..."
+(
+uninstall_dir=$(printf %s "${install_dir}" | sed 's/openaev/openbas/g')
+uninstall_service=$(printf %s "${service_name}" | sed 's/openaev/openbas/g')
+rm -f ${uninstall_dir}/openbas_agent_kill.sh
+rm -f ${uninstall_dir}/openbas-agent-config.toml
+rm -f ${uninstall_dir}/openbas-agent
+launchctl remove io.filigran.${uninstall_service}
+) || (echo "Error while uninstalling OpenBAS Agent" >&2 && exit 1)
+
+
+fi
+# ... Manage the renaming OpenBAS -> OpenAEV
 
 echo "OpenAEV Agent started."
