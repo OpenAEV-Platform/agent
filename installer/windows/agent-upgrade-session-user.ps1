@@ -67,12 +67,12 @@ $AgentPath = $AgentPath -replace "OAEV", "OBAS"
 Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "OAEV", "OBAS"
-rm -Force "${UninstallDir}/openbas.ico"
-rm -Force "${UninstallDir}/openbas_agent_kill.ps1"
-rm -Force "${UninstallDir}/openbas_agent_start.ps1"
-rm -Force "${UninstallDir}/openbas-agent.exe"
-rm -Force "${UninstallDir}/openbas-agent-config.toml"
-rm -Force "${UninstallDir}/uninstall.exe"
+rm -force "${UninstallDir}/openbas.ico"
+rm -force "${UninstallDir}/openbas_agent_kill.ps1"
+rm -force "${UninstallDir}/openbas_agent_start.ps1"
+rm -force "${UninstallDir}/openbas-agent.exe"
+rm -force "${UninstallDir}/openbas-agent-config.toml"
+rm -force "${UninstallDir}/uninstall.exe"
 if ($isElevated) {
     schtasks.exe /End /TN "$AgentName"
     schtasks.exe /Delete /TN "$AgentName" /F
