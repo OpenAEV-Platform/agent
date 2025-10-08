@@ -28,7 +28,7 @@ $installationDir=[System.Uri]::EscapeDataString("$OpenAEVPath")
 $OpenAEVService = "${OPENAEV_SERVICE_NAME}" -replace "openbas", "openaev"
 $OpenAEVService = "$OpenAEVService" -replace "OBAS", "OAEV"
 $serviceName=[System.Uri]::EscapeDataString("$OpenAEVService")
-Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/installer/openaev/windows/service/${OPENAEV_TOKEN}?installationDir=$installationDir"&"serviceName=$serviceName" -OutFile "openaev-installer.ps1";
+Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/installer/openaev/windows/service/${OPENAEV_TOKEN}?installationDir=$installationDir&amp;serviceName=$serviceName" -OutFile "openaev-installer.ps1";
 ./openaev-installer.ps1
 sc.exe stop "${OPENAEV_SERVICE_NAME}"
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"
