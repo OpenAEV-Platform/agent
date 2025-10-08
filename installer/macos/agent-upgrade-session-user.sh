@@ -49,7 +49,8 @@ launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/io.filigran.${session_na
 else
 # Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
 echo "01. Installing OpenAEV Agent..."
-curl -s ${base_url}/api/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} | sh
+openaev_session=$(printf %s "${session_name}" | sed 's/openbas/openaev/g')
+curl -s ${base_url}/api/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" | sh
 
 echo "02. Uninstalling OpenBAS Agent..."
 (
