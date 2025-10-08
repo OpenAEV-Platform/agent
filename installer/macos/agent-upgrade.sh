@@ -50,7 +50,8 @@ launchctl bootstrap system /Library/LaunchDaemons/io.filigran.${service_name}.pl
 else
 # Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
 echo "01. Installing OpenAEV Agent..."
-curl -s ${base_url}/api/agent/installer/openaev/${os}/service/${OPENAEV_TOKEN} | sh
+openaev_service=$(printf %s "${service_name}" | sed 's/openbas/openaev/g')
+curl -s ${base_url}/api/agent/installer/openaev/${os}/service/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_service}" | sh
 
 echo "02. Uninstalling OpenBAS Agent..."
 (

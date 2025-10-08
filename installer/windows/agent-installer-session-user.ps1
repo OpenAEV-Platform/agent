@@ -49,7 +49,7 @@ try {
   	if ((Get-Host).Version.Major -lt 7) { throw "PowerShell 7 or higher is required for installation" }
   	else { echo $_ }
 } finally {
-    Start-Sleep -Seconds 1
+    Start-Sleep -Seconds 2
     rm -force ./agent-installer-session-user.exe;
   	if ($location -like "*C:\Windows\System32*") { cd C:\Windows\System32 }
 }
