@@ -10,9 +10,14 @@ Thus already a BIG THANK YOU upfront to you for choosing to help with your PR.
 *
 *
 
+### Testing Instructions
+
+1. Step-by-step how to test
+2. Environment or config notes
+
 ### Related issues
 
-*
+* Closes #ISSUE-NUMBER
 *
 
 ### Checklist
