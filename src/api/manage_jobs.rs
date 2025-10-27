@@ -19,9 +19,9 @@ impl Client {
         is_elevated: bool,
         executed_by_user: String,
     ) -> Result<Vec<JobResponse>, Error> {
-        // Post the input to the OpenBAS API
+        // Post the input to the OpenAEV API
         let post_data = json!({
-          "asset_external_reference": mid::get("openbas").unwrap(),
+          "asset_external_reference": mid::get("openaev").unwrap(),
           "agent_is_service": is_service,
           "agent_is_elevated": is_elevated,
           "agent_executed_by_user": executed_by_user
@@ -43,7 +43,7 @@ impl Client {
         }
     }
     pub fn clean_job(&self, job_id: &str) -> Result<(), Error> {
-        // Post the input to the OpenBAS API
+        // Post the input to the OpenAEV API
         match self.delete(&format!("/api/endpoints/jobs/{job_id}")).send() {
             Ok(response) => {
                 if response.status().is_success() {

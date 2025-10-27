@@ -109,7 +109,7 @@ pub fn command_execution(asset_agent_id: &str, raw_command: &str) -> Result<(), 
     // start a fire-and-forget thread to wait for process termination
     // so as to reap it and avoid zombies
     // we purposefully ignore status codes since the implant reports
-    // it directly to the openbas C2 server
+    // it directly to the openaev C2 server
     // note that hanging threads may prevent process shutdown that must then be killed
     std::thread::spawn(move || {
         child_execution.wait().expect("Process not running.");

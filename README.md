@@ -1,19 +1,19 @@
-# OpenBAS Agent
+# OpenAEV Agent
 
-[![Website](https://img.shields.io/badge/website-openbas.io-blue.svg)](https://openbas.io)
-[![CircleCI](https://circleci.com/gh/OpenBAS-Platform/agent.svg?style=shield)](https://circleci.com/gh/OpenBAS-Platform/agent/tree/main)
-[![GitHub release](https://img.shields.io/github/release/OpenBAS-Platform/agent.svg)](https://github.com/OpenBAS-Platform/agent/releases/latest)
+[![Website](https://img.shields.io/badge/website-openaev.io-blue.svg)](https://openaev.io)
+[![CircleCI](https://circleci.com/gh/OpenAEV-Platform/agent.svg?style=shield)](https://circleci.com/gh/OpenAEV-Platform/agent/tree/main)
+[![GitHub release](https://img.shields.io/github/release/OpenAEV-Platform/agent.svg)](https://github.com/OpenAEV-Platform/agent/releases/latest)
 [![Slack Status](https://img.shields.io/badge/slack-3K%2B%20members-4A154B)](https://community.filigran.io)
 
-The following repository is used to store the OpenBAS agent for the platform. For performance and low level access, the agent is written in Rust. Please start your journey with https://doc.rust-lang.org/book.
+The following repository is used to store the OpenAEV agent for the platform. For performance and low level access, the agent is written in Rust. Please start your journey with https://doc.rust-lang.org/book.
 
 ---
 
 ## 🚀 Installation
 
-Agent installation is fully managed by the OpenBAS platform.
+Agent installation is fully managed by the OpenAEV platform.
 
-You can find more information on the [official documentation](https://docs.openbas.io/latest/usage/openbas-agent/?h=agent).
+You can find more information on the [official documentation](https://docs.openaev.io/latest/usage/openaev-agent/?h=agent).
 
 ## 🛠 Development
 
@@ -139,7 +139,7 @@ cargo run -- start
 All logs are written to:
 
 ```
-target/debug/openbas-agent.log
+target/debug/openaev-agent.log
 ```
 
 Check this file if something isn’t working or you need to debug an issue locally.
@@ -148,6 +148,6 @@ Check this file if something isn’t working or you need to debug an issue local
 
 ## 🧬 About
 
-OpenBAS is developed by [Filigran](https://filigran.io), a company dedicated to building open-source security tooling.
+OpenAEV is developed by [Filigran](https://filigran.io), a company dedicated to building open-source security tooling.
 
 <a href="https://filigran.io" alt="Filigran"><img src="https://github.com/OpenCTI-Platform/opencti/raw/master/.github/img/logo_filigran.png" width="300" /></a>

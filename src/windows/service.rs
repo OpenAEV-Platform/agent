@@ -21,7 +21,7 @@ pub mod service_stub {
     use windows_service::service_dispatcher;
     use windows_service_detector::is_running_as_windows_service;
 
-    const SERVICE_NAME: &str = "OBASAgentService";
+    const SERVICE_NAME: &str = "OAEVAgentService";
     const SERVICE_TYPE: ServiceType = ServiceType::OWN_PROCESS;
 
     pub fn is_windows_service() -> bool {

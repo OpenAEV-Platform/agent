@@ -3,7 +3,7 @@ import logging
 import os
 
 import requests
-from OBAS_utils.release_utils import check_release, closeRelease
+from OAEV_utils.release_utils import check_release, closeRelease
 
 logging.basicConfig(encoding="utf-8", level=logging.INFO)
 
@@ -61,28 +61,28 @@ logging.info("[agent] Tagging")
 os.system("git tag -f " + new_version + " && git push -f --tags > /dev/null 2>&1")
 
 check_release(
-    "https://filigran.jfrog.io/ui/native/openbas-agent/linux/x86_64/",
-    "openbas-agent-" + new_version,
+    "https://filigran.jfrog.io/ui/native/openaev-agent/linux/x86_64/",
+    "openaev-agent-" + new_version,
 )
 check_release(
-    "https://filigran.jfrog.io/ui/native/openbas-agent/linux/arm64/",
-    "openbas-agent-" + new_version,
+    "https://filigran.jfrog.io/ui/native/openaev-agent/linux/arm64/",
+    "openaev-agent-" + new_version,
 )
 check_release(
-    "https://filigran.jfrog.io/ui/native/openbas-agent/macos/x86_64/",
-    "openbas-agent-" + new_version,
+    "https://filigran.jfrog.io/ui/native/openaev-agent/macos/x86_64/",
+    "openaev-agent-" + new_version,
 )
 check_release(
-    "https://filigran.jfrog.io/ui/native/openbas-agent/macos/arm64/",
-    "openbas-agent-" + new_version,
+    "https://filigran.jfrog.io/ui/native/openaev-agent/macos/arm64/",
+    "openaev-agent-" + new_version,
 )
 check_release(
-    "https://filigran.jfrog.io/ui/native/openbas-agent/windows/x86_64/",
-    "openbas-agent-" + new_version,
+    "https://filigran.jfrog.io/ui/native/openaev-agent/windows/x86_64/",
+    "openaev-agent-" + new_version,
 )
 check_release(
-    "https://filigran.jfrog.io/ui/native/openbas-agent/windows/arm64/",
-    "openbas-agent-" + new_version,
+    "https://filigran.jfrog.io/ui/native/openaev-agent/windows/arm64/",
+    "openaev-agent-" + new_version,
 )
 
 logging.info("[agent] Generating release")
@@ -91,7 +91,7 @@ os.system("gren release > /dev/null 2>&1")
 # Modify the release note
 logging.info("[agent] Getting the current release note")
 release = requests.get(
-    "https://api.github.com/repos/OpenBAS-Platform/agent/releases/latest",
+    "https://api.github.com/repos/OpenAEV-Platform/agent/releases/latest",
     headers={
         "Accept": "application/vnd.github+json",
         "Authorization": "Bearer " + github_token,
@@ -103,7 +103,7 @@ release_body = release_data["body"]
 
 logging.info("[agent] Generating the new release note")
 github_release_note = requests.post(
-    "https://api.github.com/repos/OpenBAS-Platform/agent/releases/generate-notes",
+    "https://api.github.com/repos/OpenAEV-Platform/agent/releases/generate-notes",
     headers={
         "Accept": "application/vnd.github+json",
         "Authorization": "Bearer " + github_token,
@@ -126,7 +126,7 @@ else:
 
 logging.info("[agent] Updating the release")
 requests.patch(
-    "https://api.github.com/repos/OpenBAS-Platform/agent/releases/"
+    "https://api.github.com/repos/OpenAEV-Platform/agent/releases/"
     + str(release_data["id"]),
     headers={
         "Accept": "application/vnd.github+json",
@@ -137,6 +137,6 @@ requests.patch(
 )
 
 closeRelease(
-    "https://api.github.com/repos/OpenBAS-Platform/agent", new_version, github_token
+    "https://api.github.com/repos/OpenAEV-Platform/agent", new_version, github_token
 )
 logging.info("[agent] Release done!")

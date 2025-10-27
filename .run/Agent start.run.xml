@@ -1,7 +1,7 @@
 <component name="ProjectRunConfigurationManager">
   <configuration default="false" name="Agent start" type="CargoCommandRunConfiguration" factoryName="Cargo Command">
     <option name="buildProfileId" value="dev" />
-    <option name="command" value="run --package openbas-agent --bin openbas-agent" />
+    <option name="command" value="run --package openaev-agent --bin openaev-agent" />
     <option name="workingDirectory" value="file://$PROJECT_DIR$" />
     <envs>
       <env name="env" value="development" />

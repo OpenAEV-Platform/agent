@@ -12,7 +12,7 @@ Cargo.lock
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
-obas-executor.*
+oaev-executor.*
 config/development.toml
 config/production.toml
 installer/windows/*.exe

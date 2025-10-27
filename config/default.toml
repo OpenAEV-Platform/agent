@@ -1,10 +1,10 @@
 debug=false
 
-[openbas]
+[openaev]
 url = "http://localhost:3001"
 token = "ChangeMe"
 unsecured_certificate = false
 with_proxy = false
 installation_mode= "session-user"
-service_name = "OBASAgentService"
-service_full_name = "OBASAgentService"
+service_name = "OAEVAgentService"
+service_full_name = "OAEVAgentService"

@@ -24,7 +24,7 @@ impl Client {
             .use_rustls_tls()
             .connect_timeout(Duration::from_secs(2))
             .timeout(Duration::from_secs(5))
-            .user_agent(format!("openbas-agent/{VERSION}"));
+            .user_agent(format!("openaev-agent/{VERSION}"));
         if !with_proxy {
             http_client = http_client.no_proxy();
         }
