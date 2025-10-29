@@ -1,5 +1,6 @@
 use super::Client;
 use crate::common::error_model::Error;
+use log::error;
 use serde::Deserialize;
 use serde_json::json;
 
@@ -36,10 +37,14 @@ impl Client {
                     let msg = response
                         .text()
                         .unwrap_or_else(|_| "Unknown error".to_string());
+                    error!("Warning API list_jobs {}", msg);
                     Err(Error::Api(msg))
                 }
             }
-            Err(err) => Err(Error::Internal(err.to_string())),
+            Err(err) => {
+                error!("Error API list_jobs {}", err.to_string());
+                Err(Error::Internal(err.to_string()))
+            }
         }
     }
     pub fn clean_job(&self, job_id: &str) -> Result<(), Error> {
@@ -52,10 +57,14 @@ impl Client {
                     let msg = response
                         .text()
                         .unwrap_or_else(|_| "Unknown error".to_string());
+                    error!("Warning API clean_job {}", msg);
                     Err(Error::Api(msg))
                 }
             }
-            Err(err) => Err(Error::Internal(err.to_string())),
+            Err(err) => {
+                error!("Error API clean_job {}", err.to_string());
+                Err(Error::Internal(err.to_string()))
+            }
         }
     }
 }
