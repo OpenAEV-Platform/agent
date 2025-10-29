@@ -1,5 +1,6 @@
 use super::Client;
 use crate::common::error_model::Error;
+use log::error;
 use network_interface::NetworkInterface;
 use network_interface::NetworkInterfaceConfig;
 use serde::Deserialize;
@@ -108,10 +109,14 @@ impl Client {
                     let msg = response
                         .text()
                         .unwrap_or_else(|_| "Unknown error".to_string());
+                    error!("Warning API register_agent {}", msg);
                     Err(Error::Api(msg))
                 }
             }
-            Err(err) => Err(Error::Internal(err.to_string())),
+            Err(err) => {
+                error!("Error API register_agent {}", err.to_string());
+                Err(Error::Internal(err.to_string()))
+            }
         }
     }
 }
