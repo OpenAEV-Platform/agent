@@ -1,6 +1,6 @@
 [package]
 name = "openaev-agent"
-version = "2.0.1"
+version = "2.0.2"
 edition = "2021"
 
 [dependencies]
@@ -10,7 +10,7 @@ serde = { version = "1.0.203", features = ["derive"] }
 serde_json = {version = "1.0.140"}
 log = { version = "0.4.22", features = ["kv"] }
 hostname = "0.4.0"
-network-interface = "2.0.1"
+network-interface = "2.0.2"
 mid = "=3.0.2"
 tracing-subscriber = { version = "0.3.18", features = ["json"] }
 tracing-appender = "0.2.3"
