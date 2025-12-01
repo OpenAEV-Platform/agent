@@ -10,19 +10,18 @@ jobs:
       contents: read
       checks: write
       pull-requests: write
+
     steps:
-      # NEW: tools for JWT + JSON
       - name: Install dependencies for GitHub App auth
         run: |
           sudo apt-get update -y
           sudo apt-get install -y jq openssl
 
-      # NEW: get GitHub App installation token (no Python)
       - name: Get GitHub App installation token
         id: app-token
         env:
-          APP_ID: ${{ secrets.OPENAEV_PR_CHECKS_APP_ID }}
-          PRIVATE_KEY: ${{ secrets.OPENAEV_PR_CHECKS_PRIVATE_KEY }}
+          APP_ID: ${{ secrets.PR_TITLE_APP_ID }}
+          PRIVATE_KEY: ${{ secrets.PR_TITLE_APP_PRIVATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
@@ -30,21 +29,23 @@ jobs:
           # Write private key to file
           printf '%s\n' "$PRIVATE_KEY" > app-private-key.pem
 
-          # Create JWT header+payload (base64url, no padding)
-          header_base64=$(printf '{"alg":"RS256","typ":"JWT"}' | openssl base64 -e | tr '+/' '-_' | tr -d '=')
+          # Header
+          header='{"alg":"RS256","typ":"JWT"}'
+          header_base64=$(printf '%s' "$header" | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')
 
+          # Payload
           now=$(date +%s)
           iat=$((now - 60))
           exp=$((now + 600))
           payload=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$iat" "$exp" "$APP_ID")
-          payload_base64=$(printf '%s' "$payload" | openssl base64 -e | tr '+/' '-_' | tr -d '=')
+          payload_base64=$(printf '%s' "$payload" | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')
 
           header_payload="${header_base64}.${payload_base64}"
 
-          # Sign header.payload with app private key (RS256), then base64url encode
-          signature=$(printf '%s' "$header_payload" | \
-            openssl dgst -sha256 -sign app-private-key.pem | \
-            openssl base64 -e | tr '+/' '-_' | tr -d '=')
+          # Signature (RS256)
+          signature=$(printf '%s' "$header_payload" \
+            | openssl dgst -sha256 -sign app-private-key.pem \
+            | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')
 
           APP_JWT="${header_payload}.${signature}"
 
@@ -70,20 +71,26 @@ jobs:
 
           INSTALLATION_TOKEN=$(echo "$INSTALLATION_TOKEN_RESPONSE" | jq -r '.token')
 
+          if [ -z "$INSTALLATION_TOKEN" ] || [ "$INSTALLATION_TOKEN" = "null" ]; then
+            echo "Failed to get installation token. Response:"
+            echo "$INSTALLATION_TOKEN_RESPONSE"
+            exit 1
+          fi
+
           echo "::add-mask::$INSTALLATION_TOKEN"
           echo "token=$INSTALLATION_TOKEN" >> "$GITHUB_OUTPUT"
 
-      # ORIGINAL STEP: only change is GITHUB_TOKEN value
       - name: Validate PR title and create check
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}   # CHANGED: app installation token
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
           TITLE="${{ github.event.pull_request.title }}"
           echo "PR title: $TITLE"
+
           # Skip validation for renovate
           if [[ "$TITLE" == *"chore(deps)"* ]]; then
             echo "⚠️ Skipping validation for renovate PRs."
@@ -132,6 +139,7 @@ jobs:
               CONCLUSION="failure"
             fi
           fi
+
           # Create custom check run
           CHECK_RUN=$(
             curl -sS -X POST \
@@ -148,6 +156,7 @@ jobs:
           )
           CHECK_RUN_ID=$(echo "$CHECK_RUN" | jq -r '.id')
           echo "Created check run ID: $CHECK_RUN_ID"
+
           # Complete the check run with conclusion + detailed summary
           curl -sS -X PATCH \
             -H "Authorization: Bearer $GITHUB_TOKEN" \
@@ -164,5 +173,6 @@ jobs:
             }
           }
           EOF
+
           # Do not fail job (continue-on-error is true)
           exit 0
