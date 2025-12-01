@@ -28,7 +28,7 @@ jobs:
         working-directory: agent
     steps:
       - name: checkout repo content
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           repository: OpenAEV-Platform/agent
           ref: ${{ inputs.branch_agent }}
