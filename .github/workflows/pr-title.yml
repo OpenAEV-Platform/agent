@@ -84,7 +84,7 @@ jobs:
 
               OUTPUT_TITLE="$REASON"
               OUTPUT_SUMMARY="❌ Invalid PR title: $REASON. \nRequired: [category] type(scope?): description (#XXX)"
-              CONCLUSION="error"
+              CONCLUSION="failure"
             fi
           fi
 
@@ -96,7 +96,7 @@ jobs:
               https://api.github.com/repos/$REPO/check-runs \
               -d @- <<EOF
           {
-            "name": "PR Title",
+            "name": "Validate PR Title",
             "head_sha": "$SHA",
             "status": "in_progress"
           }
