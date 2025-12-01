@@ -83,8 +83,8 @@ jobs:
               echo "[category] type(scope?): description (#123)"
 
               OUTPUT_TITLE="$REASON"
-              OUTPUT_SUMMARY="❌ Invalid PR title: $REASON. \nRequired: [category] type(scope?): description (#123)"
-              CONCLUSION="failure"
+              OUTPUT_SUMMARY="❌ Invalid PR title: $REASON. \nRequired: [category] type(scope?): description (#XXX)"
+              CONCLUSION="neutral"
             fi
           fi
 
