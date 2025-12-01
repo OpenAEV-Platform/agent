@@ -1,7 +1,9 @@
 name: "Validate PR Title"
+
 on:
   pull_request:
     types: [opened, edited, reopened, ready_for_review, synchronize]
+
 jobs:
   validate-pr-title:
     runs-on: ubuntu-latest
@@ -9,85 +11,23 @@ jobs:
     permissions:
       contents: read
       checks: write
-      pull-requests: write
 
     steps:
-      - name: Install dependencies for GitHub App auth
-        run: |
-          sudo apt-get update -y
-          sudo apt-get install -y jq openssl
-
-      - name: Get GitHub App installation token
-        id: app-token
-        env:
-          APP_ID: ${{ secrets.PR_TITLE_APP_ID }}
-          PRIVATE_KEY: ${{ secrets.PR_TITLE_APP_PRIVATE_KEY }}
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          # Write private key to file
-          printf '%s\n' "$PRIVATE_KEY" > app-private-key.pem
-
-          # Header
-          header='{"alg":"RS256","typ":"JWT"}'
-          header_base64=$(printf '%s' "$header" | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')
-
-          # Payload
-          now=$(date +%s)
-          iat=$((now - 60))
-          exp=$((now + 600))
-          payload=$(printf '{"iat":%s,"exp":%s,"iss":"%s"}' "$iat" "$exp" "$APP_ID")
-          payload_base64=$(printf '%s' "$payload" | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')
-
-          header_payload="${header_base64}.${payload_base64}"
-
-          # Signature (RS256)
-          signature=$(printf '%s' "$header_payload" \
-            | openssl dgst -sha256 -sign app-private-key.pem \
-            | openssl base64 -e -A | tr '+/' '-_' | tr -d '=')
-
-          APP_JWT="${header_payload}.${signature}"
-
-          # Get installations for this app
-          INSTALLATIONS=$(curl -sS \
-            -H "Authorization: Bearer $APP_JWT" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/app/installations)
-
-          INSTALLATION_ID=$(echo "$INSTALLATIONS" | jq -r '.[0].id')
-
-          if [ -z "$INSTALLATION_ID" ] || [ "$INSTALLATION_ID" = "null" ]; then
-            echo "Could not determine installation id. Response:"
-            echo "$INSTALLATIONS"
-            exit 1
-          fi
-
-          # Create installation access token
-          INSTALLATION_TOKEN_RESPONSE=$(curl -sS -X POST \
-            -H "Authorization: Bearer $APP_JWT" \
-            -H "Accept: application/vnd.github+json" \
-            https://api.github.com/app/installations/$INSTALLATION_ID/access_tokens)
-
-          INSTALLATION_TOKEN=$(echo "$INSTALLATION_TOKEN_RESPONSE" | jq -r '.token')
-
-          if [ -z "$INSTALLATION_TOKEN" ] || [ "$INSTALLATION_TOKEN" = "null" ]; then
-            echo "Failed to get installation token. Response:"
-            echo "$INSTALLATION_TOKEN_RESPONSE"
-            exit 1
-          fi
-
-          echo "::add-mask::$INSTALLATION_TOKEN"
-          echo "token=$INSTALLATION_TOKEN" >> "$GITHUB_OUTPUT"
-
+      - name: Generate a token
+        id: generate-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ vars.OPENAEV_PR_CHECKS_APP_ID }}
+          private-key: ${{ secrets.OPENAEV_PR_CHECKS_PRIVATE_KEY }}
       - name: Validate PR title and create check
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GITHUB_TOKEN: ${{ steps.generate-token.outputs.token }}
           REPO: ${{ github.repository }}
           SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
+
           TITLE="${{ github.event.pull_request.title }}"
           echo "PR title: $TITLE"
 
@@ -101,6 +41,7 @@ jobs:
             # Full pattern:
             # [category/subcategory] type(scope?): description (#123)
             FULL_PATTERN='^\[([a-z]+(/[a-z]+)*)\] (feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(\([a-z-]+\))?: [a-z].*( \(#[0-9]+\))$'
+
             if [[ "$TITLE" =~ $FULL_PATTERN ]]; then
               echo "✅ PR title is valid."
               OUTPUT_TITLE="✅ PR title is valid."
@@ -108,32 +49,39 @@ jobs:
               CONCLUSION="success"
             else
               # Diagnose common failures
+
               # 1) Check category block: [category/category]
               CATEGORY_PATTERN='^\[([a-z]+(/[a-z]+)*)\]'
               if ! [[ "$TITLE" =~ $CATEGORY_PATTERN ]]; then
                 REASON="Bad [category] block. Expected: [category] or [category/category]"
               fi
+
               # 2) Check type + optional scope
               TYPE_PATTERN='^\[([a-z]+(/[a-z]+)*)\] (feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(\([a-z-]+\))?: '
               if [[ -z "${REASON:-}" ]] && ! [[ "$TITLE" =~ $TYPE_PATTERN ]]; then
                 REASON="Bad type(scope): block. Expected type: feat, fix, chore, docs, style, refactor, perf, test, build, ci, revert (optionally with scope: type(scope):)"
               fi
+
               # 3) Check description starts with lowercase letter
               DESC_PATTERN='^\[([a-z]+(/[a-z]+)*)\] (feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(\([a-z-]+\))?: [a-z]'
               if [[ -z "${REASON:-}" ]] && ! [[ "$TITLE" =~ $DESC_PATTERN ]]; then
                 REASON="Bad description. Must start with a lowercase letter after ': '"
               fi
+
               # 4) Check issue reference at the end: (#XXX)
               ISSUE_PATTERN='\(#[0-9]+\)$'
               if [[ -z "${REASON:-}" ]] && ! [[ "$TITLE" =~ $ISSUE_PATTERN ]]; then
                 REASON="Bad (#XXX) ending block. Missing issue reference"
               fi
+
               if [[ -z "${REASON:-}" ]]; then
                 REASON="Bad title. Does not match the required pattern"
               fi
+
               echo "❌ Invalid PR title: $REASON"
               echo "Required format:"
               echo "[category] type(scope?): description (#123)"
+
               OUTPUT_TITLE="$REASON"
               OUTPUT_SUMMARY="❌ Invalid PR title: $REASON. Required: [category] type(scope?): description (#123)"
               CONCLUSION="failure"
@@ -154,6 +102,7 @@ jobs:
           }
           EOF
           )
+
           CHECK_RUN_ID=$(echo "$CHECK_RUN" | jq -r '.id')
           echo "Created check run ID: $CHECK_RUN_ID"
 
