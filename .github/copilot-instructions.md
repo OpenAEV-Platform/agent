@@ -187,12 +187,12 @@ cargo install cargo-llvm-cov && cargo llvm-cov --html  # Coverage
 
 **Always suggest changes to improve readability.** Example:
 ```rust
-// Instead of inline validation:
-if user.email.is_some() && user.email.unwrap().contains('@') && user.email.unwrap().len() > 5 {
+// Instead of inline validation (problematic - multiple unwraps):
+if user.email.is_some() && user.email.as_ref().unwrap().contains('@') {
     submit_button.enabled = true;
 }
 
-// Consider extracting validation:
+// Consider extracting validation (safer and more readable):
 fn is_valid_email(email: &Option<String>) -> bool {
     email.as_ref().map_or(false, |e| e.contains('@') && e.len() > 5)
 }
