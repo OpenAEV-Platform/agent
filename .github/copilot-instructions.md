@@ -101,77 +101,38 @@ cargo update                   # Update dependencies
 
 **Note:** cargo-audit installed but not run in CI (macos_x86_64_compile installs it).
 
-## Continuous Integration (CircleCI)
+## CI Pipeline (CircleCI)
 
-**Pipeline:** `.circleci/config.yml` - Builds for 6 platforms (Linux, macOS, Windows × x86_64, ARM64)
+**6 platforms:** Linux, macOS, Windows × x86_64, ARM64
 
-**PR/Development Branch Checks (`*_compile` jobs):**
-1. `cargo check` - Compilation check
-2. `cargo fmt -- --check` - Format validation (Windows job only)
-3. `cargo build --release` - Release build
-4. `cargo test --release` - Test suite
+**PR/Dev Checks (`*_compile`):** `cargo check`, `cargo fmt --check` (Windows only), `cargo build --release`, `cargo test --release`
 
-**Main/Release Branch (`*_build` jobs):**
-- Same checks as compile jobs (except fmt)
-- Additional: Builds installers (NSIS for Windows)
-- Uploads artifacts to JFrog Artifactory
+**Main/Release (`*_build`):** Same checks (except fmt) + installers (NSIS for Windows) + JFrog upload
 
-**Failing CI?** Most common reasons:
-- Formatting issues (use `cargo fmt`) - only checked on Windows compile job
-- Compilation errors (use `cargo check`)
-- Test failures (run `cargo test --release` locally)
+**Common CI failures:** Formatting (Windows only), compilation errors, test failures
 
-## Testing Strategy
+## Testing & Common Issues
 
 ```bash
 cargo test                     # All tests ~35s
 cargo test test_name           # Specific test
-cargo test -- --nocapture      # Verbose output
-
-# Coverage (requires cargo-llvm-cov)
-cargo install cargo-llvm-cov
-cargo llvm-cov --html          # Output: target/llvm-cov/html/
+cargo test -- --nocapture      # Verbose
+cargo install cargo-llvm-cov && cargo llvm-cov --html  # Coverage
 ```
 
-**Test Files:** `src/tests/` directory.
+**Issues:** Config not found (set `env=development`); Clippy warnings (`.to_string()` in format args, unnecessary `unwrap_err()`); Windows code needs Windows runners; Network test may fail with strict SSL
 
-## Common Issues & Workarounds
+## Architecture & Configuration
 
-**Config File Not Found:** Set `env=development` or create config file.
+**Threading:** 3 threads - keep-alive (`keep_alive.rs`), job listener (`agent_job.rs`), cleanup (`agent_cleanup.rs`)
 
-**Clippy Warnings:** `.to_string()` in format args (remove it); unnecessary `unwrap_err()` after `is_err()` (use `if let Err(e)`). Fix: `cargo fix --clippy`
+**HTTP Client:** `reqwest` with optional TLS verification, proxy support, custom headers
 
-**Windows-Specific Code:** `src/windows/service.rs` uses `windows-service` crate. Test only on Windows runners.
+**Job Execution:** `agent_exec.rs` manages runtime downloads, payload execution, working directories (`runtimes/`, `payloads/`)
 
-**Network Tests:** `test_unsecured_certificate_acceptance` may fail with strict SSL policies.
+**Config Modes:** Development (reads `config/default.toml`); Production (reads `openaev-agent-config` next to executable)
 
-## Architecture Notes
-
-**Threading Model:** Agent uses 3 threads:
-1. **Keep-alive thread** (`keep_alive.rs`) - Registers agent, sends heartbeats
-2. **Job listener thread** (`agent_job.rs`) - Polls for new jobs
-3. **Cleanup thread** (`agent_cleanup.rs`) - Removes old payloads/runtimes
-
-**HTTP Client:** Uses `reqwest` with:
-- Optional TLS verification (`unsecured_certificate`)
-- Optional system proxy support (`with_proxy`)
-- Custom headers (token, machine ID, hostname)
-
-**Job Execution:** Jobs are executed via `agent_exec.rs` which manages:
-- Runtime downloads
-- Payload execution
-- Working directory management (`runtimes/`, `payloads/`)
-
-**Configuration:** Two modes:
-- **Development:** Reads from `config/default.toml` or `config/development.toml`
-- **Production:** Reads from `openaev-agent-config` next to executable
-
-## Key Dependencies
-
-- **reqwest** - HTTP client (rustls-tls), **config** - Config management, **serde/serde_json** - Serialization
-- **tracing** - Logging (JSON), **rolling-file** - Log rotation, **network-interface** - Network info
-- **mid** - Machine ID (locked to v3.0.2 - do not update without testing)
-- **windows-service** - Windows service support
+**Key Dependencies:** reqwest (rustls-tls), config, serde/serde_json, tracing (JSON), rolling-file, network-interface, mid (locked v3.0.2), windows-service
 
 ## Making Changes
 
@@ -196,6 +157,47 @@ cargo llvm-cov --html          # Output: target/llvm-cov/html/
 - Add/update tests for new features or bug fixes
 - Update documentation if changing APIs or behavior
 - Verify CI passes on all 6 platforms
+
+**When reviewing code, focus on:**
+
+### Security Critical Issues
+- Check for hardcoded secrets, API keys, or credentials
+- Look for SQL injection and XSS vulnerabilities
+- Verify proper input validation and sanitization
+- Review authentication and authorization logic
+
+### Performance Red Flags
+- Identify N+1 database query problems
+- Spot inefficient loops and algorithmic issues
+- Check for memory leaks and resource cleanup
+- Review caching opportunities for expensive operations
+
+### Code Quality Essentials
+- Functions should be focused and appropriately sized
+- Use clear, descriptive naming conventions
+- Ensure proper error handling throughout
+
+### Review Style
+- Be specific and actionable in feedback
+- Explain the "why" behind recommendations
+- Acknowledge good patterns when you see them
+- Ask clarifying questions when code intent is unclear
+
+**Always prioritize security vulnerabilities and performance issues that could impact users.**
+
+**Always suggest changes to improve readability.** Example:
+```rust
+// Instead of inline validation:
+if user.email.is_some() && user.email.unwrap().contains('@') && user.email.unwrap().len() > 5 {
+    submit_button.enabled = true;
+}
+
+// Consider extracting validation:
+fn is_valid_email(email: &Option<String>) -> bool {
+    email.as_ref().map_or(false, |e| e.contains('@') && e.len() > 5)
+}
+submit_button.enabled = is_valid_email(&user.email);
+```
 
 **PR Checklist (from template):**
 - I consider the submitted work as finished
