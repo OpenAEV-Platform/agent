@@ -67,25 +67,27 @@ cargo build --target=x86_64-unknown-linux-musl --release
 strip ./target/x86_64-unknown-linux-musl/release/openaev-agent
 ```
 
-### Code Quality (CRITICAL - CI will fail if these don't pass)
+### Code Quality
 
 **Always run these before committing:**
 
 ```bash
-# 1. Format check (REQUIRED)
+# 1. Format check (REQUIRED in CI - Windows compile job)
 cargo fmt -- --check           # Check formatting
 cargo fmt                      # Auto-fix formatting issues
 
-# 2. Linting (REQUIRED - zero warnings policy)
+# 2. Linting (RECOMMENDED - not enforced in CI)
 cargo clippy -- -D warnings    # Fails on ANY warning
 cargo fix --clippy             # Auto-fix some clippy issues
 
-# 3. Tests (REQUIRED)
+# 3. Tests (REQUIRED in CI)
 cargo test                     # ~35 seconds
 cargo test --release          # CI uses release mode for tests
 ```
 
-**Known Issue:** As of this writing, there are 5 clippy warnings related to `.to_string()` in format args and unnecessary `unwrap_err()` calls. These MUST be fixed for CI to pass. One test (`test_unsecured_certificate_acceptance`) is known to fail intermittently.
+**Known Issues:** 
+- 5 clippy warnings exist (`.to_string()` in format args, unnecessary `unwrap_err()` calls). These don't block CI but should be fixed.
+- One test (`test_unsecured_certificate_acceptance`) is known to fail intermittently.
 
 ### Running the Agent Locally
 
@@ -121,7 +123,7 @@ cargo audit
 cargo update
 ```
 
-**Note:** Cargo audit is run in CI and will block releases if vulnerabilities are found.
+**Note:** Cargo audit can be installed but is not run in CI regularly. The macos_x86_64_compile job installs it but doesn't execute it.
 
 ## Continuous Integration (CircleCI)
 
@@ -129,19 +131,19 @@ cargo update
 
 **PR/Development Branch Checks (`*_compile` jobs):**
 1. `cargo check` - Compilation check
-2. `cargo fmt -- --check` - Format validation
+2. `cargo fmt -- --check` - Format validation (Windows job only)
 3. `cargo build --release` - Release build
 4. `cargo test --release` - Test suite
 
 **Main/Release Branch (`*_build` jobs):**
-- Same checks as compile jobs
+- Same checks as compile jobs (except fmt)
 - Additional: Builds installers (NSIS for Windows)
 - Uploads artifacts to JFrog Artifactory
 
 **Failing CI?** Most common reasons:
-- Clippy warnings (use `cargo clippy -- -D warnings` locally)
-- Formatting issues (use `cargo fmt`)
-- Test failures (run `cargo test` locally)
+- Formatting issues (use `cargo fmt`) - only checked on Windows compile job
+- Compilation errors (use `cargo check`)
+- Test failures (run `cargo test --release` locally)
 
 ## Testing Strategy
 
