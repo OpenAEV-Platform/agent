@@ -198,12 +198,12 @@ cargo llvm-cov --html          # Output: target/llvm-cov/html/
 - Verify CI passes on all 6 platforms
 
 **PR Checklist (from template):**
-- Code is finished and ready for review
-- Functionality tested
-- Test cases written for relevant use cases
-- Documentation added/updated
-- Code refactored for quality where necessary
-- Bug fixes include tests covering the bug
+- I consider the submitted work as finished
+- I tested the code for its functionality
+- I wrote test cases for the relevant uses case
+- I added/update the relevant documentation (either on github or on notion)
+- Where necessary I refactored code to improve the overall quality
+- For bug fix → I implemented a test that covers the bug
 
 ## Release Process
 
