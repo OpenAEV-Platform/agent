@@ -40,28 +40,19 @@
 
 ## Build & Development
 
-**Rust Version:** 1.92.0+ (uses 2021 edition)
+**Rust Version:** 1.92.0+ (2021 edition)
 
-### Prerequisites
-- Install Rust via [rustup](https://rustup.rs/)
-- Cargo is bundled with Rust
-
-### Build Commands
+**Prerequisites:** [Rust](https://rustup.rs/) (includes Cargo)
 
 ```bash
-# Check compilation without building
-cargo check                    # ~25-30 seconds first run
+# Check compilation (~25-30s first run)
+cargo check
 
-# Build debug binary
+# Build debug/release
 cargo build                    # Output: target/debug/openaev-agent
+cargo build --release          # ~60s; Output: target/release/openaev-agent
 
-# Build release binary
-cargo build --release          # ~60 seconds; Output: target/release/openaev-agent
-```
-
-**Platform-Specific Builds (Linux):**
-```bash
-# For Linux musl static builds (used in CI):
+# Linux musl builds (CI)
 rustup target add x86_64-unknown-linux-musl
 cargo build --target=x86_64-unknown-linux-musl --release
 strip ./target/x86_64-unknown-linux-musl/release/openaev-agent
@@ -69,61 +60,46 @@ strip ./target/x86_64-unknown-linux-musl/release/openaev-agent
 
 ### Code Quality
 
-**Always run these before committing:**
+**Always run before committing:**
 
 ```bash
-# 1. Format check (REQUIRED in CI - Windows compile job)
-cargo fmt -- --check           # Check formatting
-cargo fmt                      # Auto-fix formatting issues
+# 1. Format (REQUIRED in CI - Windows job)
+cargo fmt -- --check           # Check
+cargo fmt                      # Auto-fix
 
-# 2. Linting (RECOMMENDED - not enforced in CI)
-cargo clippy -- -D warnings    # Fails on ANY warning
-cargo fix --clippy             # Auto-fix some clippy issues
+# 2. Lint (RECOMMENDED - not in CI)
+cargo clippy -- -D warnings    # Fails on warnings
+cargo fix --clippy             # Auto-fix
 
 # 3. Tests (REQUIRED in CI)
-cargo test                     # ~35 seconds
-cargo test --release          # CI uses release mode for tests
+cargo test                     # ~35s
+cargo test --release          # CI uses release mode
 ```
 
-**Known Issues:** 
-- 5 clippy warnings exist (`.to_string()` in format args, unnecessary `unwrap_err()` calls). These don't block CI but should be fixed.
-- One test (`test_unsecured_certificate_acceptance`) is known to fail intermittently.
+**Known Issues:** 5 clippy warnings (`.to_string()` in format args, unnecessary `unwrap_err()`); 1 intermittent test failure (`test_unsecured_certificate_acceptance`).
 
-### Running the Agent Locally
+### Running Locally
 
-The agent requires a configuration file to run. For development:
-
+Development mode (reads `config/default.toml` or `config/development.toml`):
 ```bash
-# Set development mode (reads config/default.toml or config/development.toml)
 env=development cargo run -- start
-
-# Production mode (default) requires config file at:
-# target/debug/openaev-agent-config (or next to the executable)
 ```
 
-**Log Location:** `target/debug/openaev-agent.log` (JSON formatted)
+Production requires config at `target/debug/openaev-agent-config` (or next to executable).
 
-**Config Structure:** See `config/default.toml` for required fields:
-- `openaev.url` - Platform URL
-- `openaev.token` - Access token
-- `openaev.unsecured_certificate` - Allow self-signed certs
-- `openaev.with_proxy` - Use system proxy
-- `openaev.installation_mode` - "service-user" or "session-user"
+**Logs:** `target/debug/openaev-agent.log` (JSON format)
+
+**Config fields:** `openaev.url`, `openaev.token`, `openaev.unsecured_certificate`, `openaev.with_proxy`, `openaev.installation_mode` (see `config/default.toml`)
 
 ### Security Audit
 
 ```bash
-# Install cargo-audit if not present
 cargo install cargo-audit
-
-# Check for vulnerabilities
-cargo audit
-
-# Update dependencies
-cargo update
+cargo audit                    # Check vulnerabilities
+cargo update                   # Update dependencies
 ```
 
-**Note:** Cargo audit can be installed but is not run in CI regularly. The macos_x86_64_compile job installs it but doesn't execute it.
+**Note:** cargo-audit installed but not run in CI (macos_x86_64_compile installs it).
 
 ## Continuous Integration (CircleCI)
 
@@ -148,41 +124,26 @@ cargo update
 ## Testing Strategy
 
 ```bash
-# Run all tests
-cargo test                     # ~35 seconds
+cargo test                     # All tests ~35s
+cargo test test_name           # Specific test
+cargo test -- --nocapture      # Verbose output
 
-# Run specific test
-cargo test test_name
-
-# Run with verbose output
-cargo test -- --nocapture
-
-# Code coverage (requires cargo-llvm-cov)
+# Coverage (requires cargo-llvm-cov)
 cargo install cargo-llvm-cov
 cargo llvm-cov --html          # Output: target/llvm-cov/html/
 ```
 
-**Test Files:** Located in `src/tests/` directory.
+**Test Files:** `src/tests/` directory.
 
 ## Common Issues & Workarounds
 
-### Issue 1: Config File Not Found
-**Error:** `configuration file "/path/to/openaev-agent-config" not found`
-**Fix:** Set `env=development` environment variable or create the config file.
+**Config File Not Found:** Set `env=development` or create config file.
 
-### Issue 2: Clippy Warnings
-**Known Warnings:**
-- `.to_string()` in format args (remove `.to_string()`)
-- Unnecessary `unwrap_err()` after `is_err()` check (use `if let Err(e)` pattern)
+**Clippy Warnings:** `.to_string()` in format args (remove it); unnecessary `unwrap_err()` after `is_err()` (use `if let Err(e)`). Fix: `cargo fix --clippy`
 
-**Fix:** Address each warning individually. Use `cargo fix --clippy` for auto-fixes.
+**Windows-Specific Code:** `src/windows/service.rs` uses `windows-service` crate. Test only on Windows runners.
 
-### Issue 3: Windows-Specific Code
-**Context:** Windows service code is in `src/windows/service.rs`. It uses the `windows-service` crate.
-**Testing:** Windows-specific code can only be tested on Windows runners.
-
-### Issue 4: Network Tests
-**Note:** The test `test_unsecured_certificate_acceptance` may fail in environments with strict SSL policies.
+**Network Tests:** `test_unsecured_certificate_acceptance` may fail with strict SSL policies.
 
 ## Architecture Notes
 
@@ -207,16 +168,10 @@ cargo llvm-cov --html          # Output: target/llvm-cov/html/
 
 ## Key Dependencies
 
-- **reqwest** - HTTP client (with rustls-tls)
-- **config** - Configuration management
-- **serde/serde_json** - Serialization
-- **tracing** - Logging (JSON format)
-- **rolling-file** - Log rotation
-- **network-interface** - Network info
-- **mid** - Machine ID (locked to v3.0.2)
-- **windows-service** - Windows service support (Windows only)
-
-**Locked Version:** `mid = "=3.0.2"` - Do not update without testing.
+- **reqwest** - HTTP client (rustls-tls), **config** - Config management, **serde/serde_json** - Serialization
+- **tracing** - Logging (JSON), **rolling-file** - Log rotation, **network-interface** - Network info
+- **mid** - Machine ID (locked to v3.0.2 - do not update without testing)
+- **windows-service** - Windows service support
 
 ## Making Changes
 
@@ -232,6 +187,23 @@ cargo llvm-cov --html          # Output: target/llvm-cov/html/
 4. **For config changes:** Update `config/settings.rs` and `config/default.toml`.
 
 5. **Cross-platform code:** Test on all supported platforms or use CI to validate.
+
+## Code Review Guidelines
+
+**Before submitting PR:**
+- Run `cargo fmt && cargo clippy -- -D warnings && cargo test`
+- Test functionality manually if code changes affect runtime behavior
+- Add/update tests for new features or bug fixes
+- Update documentation if changing APIs or behavior
+- Verify CI passes on all 6 platforms
+
+**PR Checklist (from template):**
+- Code is finished and ready for review
+- Functionality tested
+- Test cases written for relevant use cases
+- Documentation added/updated
+- Code refactored for quality where necessary
+- Bug fixes include tests covering the bug
 
 ## Release Process
 
