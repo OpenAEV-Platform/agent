@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Auto Label
-        uses: guillaumejparis/ci-tools/actions/auto-label@v1
+        uses: guillaumejparis/ci-tools/actions/auto-label@1.0.0
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           labels_by_organization: '{"FiligranHQ":["filigran team"]}'
