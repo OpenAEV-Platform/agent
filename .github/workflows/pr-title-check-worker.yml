@@ -1,4 +1,4 @@
-name: "PR Title Check"
+name: "PR Title Check Worker"
 on:
   pull_request:
     types: [opened, edited, reopened, ready_for_review, synchronize]
@@ -14,6 +14,6 @@ jobs:
           app-id: ${{ secrets.OPENAEV_PR_CHECKS_APP_ID }}
           private-key: ${{ secrets.OPENAEV_PR_CHECKS_PRIVATE_KEY }}
       - name: Validate PR title and create check
-        uses: guillaumejparis/ci-tools/actions/pr-title-check@main
+        uses: guillaumejparis/ci-tools/actions/pr-title-check@v1.0.0
         with:
           github_token: ${{ steps.generate-token.outputs.token }}
