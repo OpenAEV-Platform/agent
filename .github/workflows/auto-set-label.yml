@@ -2,7 +2,7 @@ name: Assign PR team labels
 on:
   pull_request:
     branches:
-      - master
+      - main
       - release/current
 jobs:
   auto-label:
