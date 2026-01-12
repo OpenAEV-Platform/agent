@@ -3,12 +3,13 @@ on:
   pull_request:
     branches:
       - master
+      - release/current
 jobs:
-  build:
+  auto-label:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - name: Setting labels
-        uses: FiligranHQ/auto-label@1.0.0
+      - name: Auto Label
+        uses: guillaumejparis/ci-tools/actions/auto-label@v1
         with:
-          labels_by_organization: "{\"FiligranHQ\":[\"filigran team\"]}"
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          labels_by_organization: '{"FiligranHQ":["filigran team"]}'
