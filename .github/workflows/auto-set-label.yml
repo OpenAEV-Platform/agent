@@ -12,6 +12,6 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Auto Label
-        uses: FiligranHQ/filigran-ci-tools/actions/auto-label@1.0.0
+        uses: FiligranHQ/filigran-ci-tools/actions/auto-label@main
         with:
           labels_by_organization: '{"FiligranHQ":["filigran team"]}'
