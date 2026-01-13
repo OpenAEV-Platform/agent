@@ -14,6 +14,6 @@ jobs:
           app-id: ${{ secrets.OPENAEV_PR_CHECKS_APP_ID }}
           private-key: ${{ secrets.OPENAEV_PR_CHECKS_PRIVATE_KEY }}
       - name: Validate PR title and create check
-        uses: guillaumejparis/ci-tools/actions/pr-title-check@1.0.0
+        uses: FiligranHQ/filigran-ci-tools/actions/pr-title-check@1.0.0
         with:
-          github_token: ${{ steps.generate-token.outputs.token }}
+          token: ${{ steps.generate-token.outputs.token }}
