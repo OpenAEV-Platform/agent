@@ -1,6 +1,6 @@
 name: "[OAEV] Common CI checks"
 on:
-  pull_request_target:
+  pull_request:
     branches: [main, release/current]
     types: [opened, edited, reopened, ready_for_review, synchronize]
 permissions:
@@ -9,19 +9,18 @@ permissions:
 jobs:
   check-signed-commits:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request_target'
+    if: github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'synchronize'
     steps:
       - name: Check signed commits in PR
         uses: FiligranHQ/filigran-ci-tools/actions/check-signed-commit@main
   auto-label:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened')
+    if: github.event.action == 'opened' || github.event.action == 'reopened'
     steps:
       - name: "Auto Label"
         uses: FiligranHQ/filigran-ci-tools/actions/auto-label@main
   validate-pr-title:
     runs-on: ubuntu-latest
-    if: github.event_name == 'pull_request'
     steps:
       - name: "Generate a token"
         id: generate-token
