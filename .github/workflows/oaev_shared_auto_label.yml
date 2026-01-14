@@ -1,4 +1,4 @@
-name: "[OAEV] Auto Label"
+name: "[OAEV Shared] Auto Label"
 on:
   pull_request:
     branches: [main, release/current]
