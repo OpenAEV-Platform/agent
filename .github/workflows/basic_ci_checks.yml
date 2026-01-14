@@ -1,0 +1,37 @@
+name: "Basic CI checks"
+on:
+  pull_request:
+    branches: [main, release/current]
+    types: [opened, edited, reopened, ready_for_review, synchronize]
+  pull_request_target: {}
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  check-signed-commits:
+    runs-on: ubuntu-latest
+    if: github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'synchronize'
+    steps:
+      - name: Check signed commits in PR
+        uses: FiligranHQ/filigran-ci-tools/actions/check-signed-commit@main
+  auto-label:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && (github.event.action == 'opened' || github.event.action == 'reopened')
+    steps:
+      - name: "Auto Label"
+        uses: FiligranHQ/filigran-ci-tools/actions/auto-label@main
+  validate-pr-title:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request'
+    steps:
+      - name: "Generate a token"
+        id: generate-token
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.OPENAEV_PR_CHECKS_APP_ID }}
+          private-key: ${{ secrets.OPENAEV_PR_CHECKS_PRIVATE_KEY }}
+      - name: "Validate PR title and create check"
+        uses: FiligranHQ/filigran-ci-tools/actions/pr-title-check@main
+        with:
+          token: ${{ steps.generate-token.outputs.token }}
