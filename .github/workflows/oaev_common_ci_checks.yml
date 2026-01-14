@@ -10,7 +10,7 @@ permissions:
 jobs:
   check-signed-commits:
     runs-on: ubuntu-latest
-    if: github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'synchronize'
+    if: github.event_name == 'pull_request_target'
     steps:
       - name: Check signed commits in PR
         uses: FiligranHQ/filigran-ci-tools/actions/check-signed-commit@main
