@@ -1,4 +1,4 @@
-name: Assign PR team labels
+name: "Assign PR Team Labels"
 on:
   pull_request:
     branches:
@@ -11,7 +11,5 @@ jobs:
   auto-label:
     runs-on: ubuntu-latest
     steps:
-      - name: Auto Label
+      - name: "Auto Label"
         uses: FiligranHQ/filigran-ci-tools/actions/auto-label@main
-        with:
-          labels_by_organization: '{"FiligranHQ":["filigran team"]}'
