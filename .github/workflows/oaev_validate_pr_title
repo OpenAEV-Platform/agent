@@ -1,4 +1,4 @@
-name: "[OAEV] Common CI checks"
+name: "[OAEV] Validate PR title"
 on:
   pull_request:
     branches: [main, release/current]
@@ -7,18 +7,6 @@ permissions:
   contents: read
   pull-requests: write
 jobs:
-  check-signed-commits:
-    runs-on: ubuntu-latest
-    if: github.event.action == 'opened' || github.event.action == 'reopened' || github.event.action == 'synchronize'
-    steps:
-      - name: Check signed commits in PR
-        uses: FiligranHQ/filigran-ci-tools/actions/check-signed-commit@main
-  auto-label:
-    runs-on: ubuntu-latest
-    if: github.event.action == 'opened' || github.event.action == 'reopened'
-    steps:
-      - name: "Auto Label"
-        uses: FiligranHQ/filigran-ci-tools/actions/auto-label@main
   validate-pr-title:
     runs-on: ubuntu-latest
     steps:
