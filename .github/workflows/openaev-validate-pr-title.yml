@@ -6,6 +6,8 @@ on:
 jobs:
   validate-pr-title:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: "Generate a token"
         id: generate-token
