@@ -11,7 +11,7 @@ serde_json = {version = "1.0.140"}
 log = { version = "0.4.22", features = ["kv"] }
 hostname = "0.4.0"
 network-interface = "2.0.3"
-mid = "=3.0.2"
+mid = "=5.0.1"
 tracing-subscriber = { version = "0.3.18", features = ["json"] }
 tracing-appender = "0.2.3"
 rolling-file = "0.2.0"
