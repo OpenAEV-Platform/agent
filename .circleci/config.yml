@@ -22,6 +22,10 @@ jobs:
       # Run checks
       - run: cargo check
       - run: cargo fmt -- --check
+      - run:
+          name: Lint PowerShell installer scripts (PSScriptAnalyzer)
+          shell: powershell.exe
+          command: .\installer\windows\Run-Lint.ps1
       - run: cargo build --release
       - run: cargo test --release
       - run: |
@@ -108,6 +112,10 @@ jobs:
           $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH;
       # Run checks
       - run: $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH; Invoke-Expression '& "$env:USERPROFILE\.cargo\bin\cargo" check'
+      - run:
+          name: Lint PowerShell installer scripts (PSScriptAnalyzer)
+          shell: powershell.exe
+          command: .\installer\windows\Run-Lint.ps1
       - run: git config --global --unset url.ssh://git@github.com.insteadOf
       - run: git config --global url.ssh://git@github.com.insteadOf https://github.com/
       - run: $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH; Invoke-Expression '& "$env:USERPROFILE\.cargo\bin\cargo" build --release'
