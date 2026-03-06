@@ -33,12 +33,12 @@ Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/installer/openaev/windows/servi
 sc.exe stop "${OPENAEV_SERVICE_NAME}"
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "OAEV", "OBAS"
-rm -force "${UninstallDir}/openbas.ico"
-rm -force "${UninstallDir}/openbas_agent_kill.ps1"
-rm -force "${UninstallDir}/openbas-agent.exe"
-rm -force "${UninstallDir}/openbas-agent-config.toml"
-rm -force "${UninstallDir}/uninstall.exe"
+Remove-Item -Force "${UninstallDir}/openbas.ico"
+Remove-Item -Force "${UninstallDir}/openbas_agent_kill.ps1"
+Remove-Item -Force "${UninstallDir}/openbas-agent.exe"
+Remove-Item -Force "${UninstallDir}/openbas-agent-config.toml"
+Remove-Item -Force "${UninstallDir}/uninstall.exe"
 sc.exe delete "${OPENAEV_SERVICE_NAME}"
-rm -force ./openaev-installer.ps1
+Remove-Item -Force ./openaev-installer.ps1
 }
-rm -force ./openaev-installer.exe;
+Remove-Item -Force ./openaev-installer.exe;

@@ -12,7 +12,7 @@ switch ($env:PROCESSOR_ARCHITECTURE)
     }
 }
 
-function Sanitize-UserName {
+function ConvertTo-SafeUserName {
     param(
         [Parameter(Mandatory = $true)]
         [string]$UserName
@@ -26,7 +26,7 @@ if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR
 
 $BasePath = "${OPENAEV_INSTALL_DIR}";
 $User = whoami;
-$SanitizedUser = Sanitize-UserName -UserName $user;
+$SanitizedUser = ConvertTo-SafeUserName -UserName $user;
 $ServiceName = "${OPENAEV_SERVICE_NAME}";
 $AgentName = "$ServiceName-$SanitizedUser";
 
@@ -46,7 +46,7 @@ Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/executable/openaev/windows/${ar
 
 sc.exe stop $AgentName;
 
-rm -force $AgentPath;
-mv $AgentUpgradedPath $AgentPath;
+Remove-Item -Force $AgentPath;
+Move-Item $AgentUpgradedPath $AgentPath;
 
 sc.exe start $AgentName;
