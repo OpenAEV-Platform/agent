@@ -81,8 +81,7 @@ try {
     echo "OpenAEV agent has been successfully installed"
 } catch {
     echo "Installation failed"
-    if ((Get-Host).Version.Major -lt 7) { throw "PowerShell 7 or higher is required for installation" }
-    else { echo $_ }
+    throw $_
 } finally {
     Start-Sleep -Seconds 2
     rm -force ./agent-installer-service-user.exe;
