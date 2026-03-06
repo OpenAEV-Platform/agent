@@ -22,6 +22,7 @@ jobs:
       # Run checks
       - run: cargo check
       - run: cargo fmt -- --check
+      - run: cargo clippy -- -D warnings
       - run: cargo build --release
       - run: cargo test --release
       - run: |
@@ -108,6 +109,7 @@ jobs:
           $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH;
       # Run checks
       - run: $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH; Invoke-Expression '& "$env:USERPROFILE\.cargo\bin\cargo" check'
+      - run: $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH; Invoke-Expression '& "$env:USERPROFILE\.cargo\bin\cargo" clippy -- -D warnings'
       - run: git config --global --unset url.ssh://git@github.com.insteadOf
       - run: git config --global url.ssh://git@github.com.insteadOf https://github.com/
       - run: $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH; Invoke-Expression '& "$env:USERPROFILE\.cargo\bin\cargo" build --release'
@@ -193,6 +195,7 @@ jobs:
       - run: . "$HOME/.cargo/env"; rustup target add x86_64-unknown-linux-musl
       # Run checks
       - run: cargo check
+      - run: cargo clippy -- -D warnings
       - run: . "$HOME/.cargo/env"; cargo build --target=x86_64-unknown-linux-musl --release
       - run: . "$HOME/.cargo/env"; cargo test --release
       - run: strip ./target/x86_64-unknown-linux-musl/release/openaev-agent
@@ -253,6 +256,7 @@ jobs:
       - run: . "$HOME/.cargo/env"; rustup target add aarch64-unknown-linux-musl
       # Run checks
       - run: cargo check
+      - run: cargo clippy -- -D warnings
       - run: . "$HOME/.cargo/env"; cargo build --target=aarch64-unknown-linux-musl --release
       - run: . "$HOME/.cargo/env"; cargo test --release
       - run: strip ./target/aarch64-unknown-linux-musl/release/openaev-agent
@@ -311,6 +315,7 @@ jobs:
       - run: curl https://sh.rustup.rs -sSf | sh -s -- -y
       # Run checks
       - run: cargo check
+      - run: cargo clippy -- -D warnings
       - run: . "$HOME/.cargo/env"; cargo build --release
       - run: . "$HOME/.cargo/env"; cargo test --release
       - run: strip ./target/release/openaev-agent
@@ -372,6 +377,9 @@ jobs:
           cargo install cargo-audit
       # Run checks
       - run: cargo check
+      - run: cargo fmt -- --check
+      - run: cargo clippy -- -D warnings
+      - run: cargo audit
       - run: . "$HOME/.cargo/env"; cargo build --release
       - run: . "$HOME/.cargo/env"; cargo test --release
       - run: strip ./target/release/openaev-agent
