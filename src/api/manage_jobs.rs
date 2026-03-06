@@ -42,7 +42,7 @@ impl Client {
                 }
             }
             Err(err) => {
-                error!("Error API list_jobs {}", err.to_string());
+                error!("Error API list_jobs {}", err);
                 Err(Error::Internal(err.to_string()))
             }
         }
@@ -62,7 +62,7 @@ impl Client {
                 }
             }
             Err(err) => {
-                error!("Error API clean_job {}", err.to_string());
+                error!("Error API clean_job {}", err);
                 Err(Error::Internal(err.to_string()))
             }
         }
