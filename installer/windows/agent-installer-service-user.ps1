@@ -82,7 +82,7 @@ try {
 } catch {
     echo "Installation failed"
     echo "Note: PowerShell 7 or higher is recommended. If the issue persists, consider upgrading."
-    throw $_
+    echo $_
 } finally {
     Start-Sleep -Seconds 2
     rm -force ./agent-installer-service-user.exe;
