@@ -81,6 +81,7 @@ try {
     echo "OpenAEV agent has been successfully installed"
 } catch {
     echo "Installation failed"
+    echo "Note: PowerShell 7 or higher is recommended. If the issue persists, consider upgrading."
     throw $_
 } finally {
     Start-Sleep -Seconds 2
