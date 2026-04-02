@@ -34,7 +34,8 @@ pub fn listen(
                         info!("Start handling inject: {:?}", j.asset_agent_inject);
                         // 01. Remove the execution job
                         info!("Cleaning job: {:?}", j.asset_agent_id);
-                        let clean_result = api.clean_job(j.asset_agent_id.as_str(), tenant_id.clone());
+                        let clean_result =
+                            api.clean_job(j.asset_agent_id.as_str(), tenant_id.clone());
                         // 02. Execute the command
                         if clean_result.is_ok() {
                             let _ = agent_exec::command_execution(
