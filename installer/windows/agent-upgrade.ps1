@@ -19,7 +19,7 @@ $OpenAEVPath = "$OpenAEVPath" -replace "OBAS", "OAEV"
 if(Test-Path "$OpenAEVPath")
 {
 # Upgrade the agent if the folder *OAEV* exists
-Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/package/openaev/windows/${architecture}/service" -OutFile "openaev-installer.exe"; ./openaev-installer.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" | Out-Null;
+Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service" -OutFile "openaev-installer.exe"; ./openaev-installer.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}" | Out-Null;
 }
 else
 {
@@ -28,7 +28,7 @@ $installationDir=[System.Uri]::EscapeDataString("$OpenAEVPath")
 $OpenAEVService = "${OPENAEV_SERVICE_NAME}" -replace "openbas", "openaev"
 $OpenAEVService = "$OpenAEVService" -replace "OBAS", "OAEV"
 $serviceName=[System.Uri]::EscapeDataString("$OpenAEVService")
-Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/installer/openaev/windows/service/${OPENAEV_TOKEN}?installationDir=$installationDir&amp;serviceName=$serviceName" -OutFile "openaev-installer.ps1";
+Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/installer/openaev/windows/service/${OPENAEV_TOKEN}?installationDir=$installationDir&amp;serviceName=$serviceName" -OutFile "openaev-installer.ps1";
 ./openaev-installer.ps1
 sc.exe stop "${OPENAEV_SERVICE_NAME}"
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"

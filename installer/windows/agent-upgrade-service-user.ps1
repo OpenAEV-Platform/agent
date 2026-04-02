@@ -42,7 +42,7 @@ if ($BasePath -match "\\$ServiceName-[^\\]+$" -or $BasePath -match "/$ServiceNam
 $AgentPath = $InstallDir + "\openaev-agent.exe";
 $AgentUpgradedPath = $InstallDir + "\openaev-agent_upgrade.exe";
 
-Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/executable/openaev/windows/${architecture}" -OutFile $AgentUpgradedPath;
+Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/executable/openaev/windows/${architecture}" -OutFile $AgentUpgradedPath;
 
 sc.exe stop $AgentName;
 

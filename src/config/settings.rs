@@ -14,6 +14,7 @@ pub struct OpenAEV {
     pub with_proxy: bool,
     pub installation_mode: String,
     pub service_name: String,
+    pub tenant_id: String,
 }
 
 #[derive(Debug, Deserialize)]

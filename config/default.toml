@@ -8,3 +8,4 @@ with_proxy = false
 installation_mode= "session-user"
 service_name = "OAEVAgentService"
 service_full_name = "OAEVAgentService"
+tenant_id = "2cffad3a-0001-4078-b0e2-ef74274022c3"
