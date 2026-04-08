@@ -41,8 +41,8 @@ try {
     Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
 
     Write-Output "Downloading and installing OpenAEV Agent...";
-    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/package/openaev/windows/${architecture}/session-user" -OutFile "agent-installer-session-user.exe";
-    ./agent-installer-session-user.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$BasePath";
+    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/session-user" -OutFile "agent-installer-session-user.exe";
+    ./agent-installer-session-user.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$BasePath" ~TENANT_ID="${OPENAEV_TENANT_ID}";
 	Write-Output "OpenAEV agent has been successfully installed"
 } catch {
     Write-Output "Installation failed"

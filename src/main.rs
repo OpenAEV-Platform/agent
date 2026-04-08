@@ -66,6 +66,7 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
     let installation_mode = settings_data.openaev.installation_mode;
     let service_name = settings_data.openaev.service_name;
     let execution_details = ExecutionDetails::new(is_service).unwrap();
+    let tenant_id = settings_data.openaev.tenant_id;
     info!(
         "ExecutionDetails : user {:?} -- is_elevated {:?} -- is_service {:?} ",
         execution_details.executed_by_user,
@@ -85,6 +86,7 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
         installation_mode,
         service_name,
         execution_details.clone(),
+        tenant_id.clone(),
     );
     // Starts the agent listening thread
     let agent_job_thread = agent_job::listen(
@@ -93,6 +95,7 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
         unsecured_certificate,
         with_proxy,
         execution_details.clone(),
+        tenant_id.clone(),
     );
     // Starts the cleanup thread
     let cleanup_thread = agent_cleanup::clean();
