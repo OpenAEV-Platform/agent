@@ -19,6 +19,7 @@ impl Client {
         is_service: bool,
         is_elevated: bool,
         executed_by_user: String,
+        tenant_id: String,
     ) -> Result<Vec<JobResponse>, Error> {
         // Post the input to the OpenAEV API
         let post_data = json!({
@@ -27,7 +28,8 @@ impl Client {
           "agent_is_elevated": is_elevated,
           "agent_executed_by_user": executed_by_user
         });
-        match self.post("/api/endpoints/jobs").json(&post_data).send() {
+        let jobs_endpoint = format!("/api/tenants/{}/endpoints/jobs", tenant_id);
+        match self.post(&jobs_endpoint).json(&post_data).send() {
             Ok(response) => {
                 if response.status().is_success() {
                     response
@@ -47,9 +49,10 @@ impl Client {
             }
         }
     }
-    pub fn clean_job(&self, job_id: &str) -> Result<(), Error> {
+    pub fn clean_job(&self, job_id: &str, tenant_id: String) -> Result<(), Error> {
         // Post the input to the OpenAEV API
-        match self.delete(&format!("/api/endpoints/jobs/{job_id}")).send() {
+        let jobs_endpoint = format!("/api/tenants/{}/endpoints/jobs/{}", tenant_id, job_id);
+        match self.delete(&jobs_endpoint).send() {
             Ok(response) => {
                 if response.status().is_success() {
                     Ok(())

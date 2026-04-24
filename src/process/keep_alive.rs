@@ -16,6 +16,7 @@ pub fn ping(
     installation_mode: String,
     service_name: String,
     execution_details: ExecutionDetails,
+    tenant_id: String,
 ) -> Result<JoinHandle<()>, Error> {
     info!("Starting ping thread");
     let api = Client::new(uri, token, unsecured_certificate, with_proxy);
@@ -29,6 +30,7 @@ pub fn ping(
                 execution_details.executed_by_user.clone(),
                 installation_mode.clone(),
                 service_name.clone(),
+                tenant_id.clone(),
             );
             if let Err(err) = register {
                 error!("Fail registering the agent {}", err)

@@ -51,6 +51,8 @@ Var LabelUnsecuredCertificate
 Var /GLOBAL ConfigUnsecuredCertificate
 Var LabelWithProxy
 Var /GLOBAL ConfigWithProxy
+Var LabelTenantId
+Var /GLOBAL ConfigTenantId
 Var /GLOBAL ConfigServiceName
 Var /GLOBAL ConfigInstallDir
 Var LabelUser
@@ -85,6 +87,11 @@ Function verifyParam
   ${If} $ConfigWithProxy != "false"
   ${AndIf} $ConfigWithProxy != "true"
     MessageBox MB_OK|MB_ICONEXCLAMATION "Missing false or true value for env with proxy"
+      Abort
+  ${EndIf}
+
+  ${If} $ConfigTenantId == ""
+    MessageBox MB_OK|MB_ICONEXCLAMATION "Missing Tenant ID"
       Abort
   ${EndIf}
 
@@ -273,6 +280,10 @@ function .onInit
     Call ExtractParameter
     StrCpy $ConfigWithProxy $0
 
+    StrCpy $0 "TENANT_ID"
+    Call ExtractParameter
+    StrCpy $ConfigTenantId $0
+
     StrCpy $0 "SERVICE_NAME"
     Call ExtractParameter
     StrCpy $ConfigServiceName $0
@@ -314,6 +325,7 @@ Var ConfigUnsecuredCertificateForm
 Var ConfigWithProxyForm
 Var ConfigUserForm
 Var ConfigPasswordForm
+Var ConfigTenantIdForm
 
 Function nsDialogsConfig
 
@@ -351,12 +363,17 @@ Function nsDialogsConfig
 	Pop $LabelPassword
 	${NSD_CreatePassword} 0 110u 100% 10u ""
 	Pop $ConfigPasswordForm
+  ${NSD_CreateLabel} 0 120u 100% 10u "Tenant ID *"
+    Pop $LabelTenantId
+    ${NSD_CreateText} 0 130u 100% 10u ""
+    Pop $ConfigTenantIdForm
 
   ${NSD_OnChange} $ConfigURLForm onFieldChange
   ${NSD_OnChange} $ConfigTokenForm onFieldChange
   ${NSD_OnChange} $ConfigUnsecuredCertificateForm onFieldChange
   ${NSD_OnChange} $ConfigWithProxyForm onFieldChange
   ${NSD_OnChange} $ConfigUserForm onFieldChange
+  ${NSD_OnChange} $ConfigTenantIdForm onFieldChange
 
   nsDialogs::Show
 FunctionEnd
@@ -367,6 +384,7 @@ Function onFieldChange
   ${NSD_GetText} $ConfigTokenForm $ConfigToken
   ${NSD_GetText} $ConfigUnsecuredCertificateForm $ConfigUnsecuredCertificate
   ${NSD_GetText} $ConfigWithProxyForm $ConfigWithProxy
+  ${NSD_GetText} $ConfigTenantIdForm $ConfigTenantId
   ${NSD_GetText} $ConfigUserForm $ConfigUser
 
   ; enable next button if both defined
@@ -376,6 +394,7 @@ Function onFieldChange
   ${AndIf} $ConfigUser != ""
   ${AndIf} $ConfigPassword != ""
   ${AndIf} $ConfigWithProxy != ""
+  ${AndIf} $ConfigTenantId != ""
     GetDlgItem $0 $HWNDPARENT 1
     EnableWindow $0 1
   ${Else}
@@ -454,6 +473,7 @@ section "install"
     FileWrite $4 "installation_mode = $\"service-user$\"$\r$\n"
     FileWrite $4 "service_name = $\"$ConfigServiceName$\"$\r$\n"
     FileWrite $4 "service_full_name = $\"$ServiceName$\"$\r$\n"
+    FileWrite $4 "tenant_id = $\"$ConfigTenantId$\"$\r$\n"
     FileWrite $4 "$\r$\n" ; newline
   FileClose $4
 

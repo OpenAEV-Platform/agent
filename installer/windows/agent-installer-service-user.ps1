@@ -75,9 +75,9 @@ switch ($env:PROCESSOR_ARCHITECTURE)
 if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR_ARCHITECTURE is not supported yet, please create a ticket in openaev github project" }
 Write-Output "Downloading and installing OpenAEV Agent..."
 try {
-    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/package/openaev/windows/${architecture}/service-user" -OutFile "agent-installer-service-user.exe";
+    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service-user" -OutFile "agent-installer-service-user.exe";
     # Use the resolved full installation path
-    ./agent-installer-service-user.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$fullInstallPath" ~USER="$User" ~PASSWORD="$Password" | Out-Null;
+    ./agent-installer-service-user.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$fullInstallPath" ~TENANT_ID="${OPENAEV_TENANT_ID}" ~USER="$User" ~PASSWORD="$Password" | Out-Null;
     Write-Output "OpenAEV agent has been successfully installed"
 } catch {
     Write-Output "Installation failed"
