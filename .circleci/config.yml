@@ -25,7 +25,7 @@ jobs:
       - run: cargo build --release
       - run: cargo test --release
       - run: |
-          cargo install cargo-cache
+          cargo install cargo-cache --force
           cargo-cache -a clean-unref
       - save_cache:
           key: cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
@@ -81,7 +81,7 @@ jobs:
             curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-service-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-installer-service-user-$env:version.ps1"
             curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade-service-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-upgrade-service-user-$env:version.ps1"
       - run: |
-          cargo install cargo-cache
+          cargo install cargo-cache --force
           cargo-cache -a clean-unref
       - save_cache:
           key: cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
@@ -113,7 +113,7 @@ jobs:
       - run: $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH; Invoke-Expression '& "$env:USERPROFILE\.cargo\bin\cargo" build --release'
       - run: $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH; Invoke-Expression '& "$env:USERPROFILE\.cargo\bin\cargo" test --release'
       - run: |
-          cargo install cargo-cache
+          cargo install cargo-cache --force
           cargo-cache -a clean-unref
       - save_cache:
           key: cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
@@ -172,7 +172,7 @@ jobs:
             curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-installer-service-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-installer-service-user-$env:version.ps1"
             curl.exe --fail-with-body -u samuel.hassine@filigran.io:$env:JFROG_TOKEN -T ./installer/windows/agent-upgrade-service-user.ps1 "https://filigran.jfrog.io/artifactory/openaev-agent/windows/openaev-agent-upgrade-service-user-$env:version.ps1"
       - run: |
-          cargo install cargo-cache
+          cargo install cargo-cache --force
           cargo-cache -a clean-unref
       - save_cache:
           key: cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
@@ -197,7 +197,7 @@ jobs:
       - run: . "$HOME/.cargo/env"; cargo test --release
       - run: strip ./target/x86_64-unknown-linux-musl/release/openaev-agent
       - run: |
-          cargo install cargo-cache
+          cargo install cargo-cache --force
           cargo-cache -a clean-unref
       - save_cache:
           key: cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
@@ -231,7 +231,7 @@ jobs:
             curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-installer-service-user-$version.sh"
             curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-upgrade-service-user-$version.sh"
       - run: |
-          cargo install cargo-cache
+          cargo install cargo-cache --force
           cargo-cache -a clean-unref
       - save_cache:
           key: cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
@@ -257,7 +257,7 @@ jobs:
       - run: . "$HOME/.cargo/env"; cargo test --release
       - run: strip ./target/aarch64-unknown-linux-musl/release/openaev-agent
       - run: |
-          cargo install cargo-cache
+          cargo install cargo-cache --force
           cargo-cache -a clean-unref
       - save_cache:
           key: cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
@@ -292,7 +292,7 @@ jobs:
             curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-installer-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-installer-service-user-$version.sh"
             curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/linux/agent-upgrade-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/linux/openaev-agent-upgrade-service-user-$version.sh"
       - run: |
-          cargo install cargo-cache
+          cargo install cargo-cache --force
           cargo-cache -a clean-unref
       - save_cache:
           key: cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
@@ -315,7 +315,7 @@ jobs:
       - run: . "$HOME/.cargo/env"; cargo test --release
       - run: strip ./target/release/openaev-agent
       - run: |
-          cargo install cargo-cache
+          cargo install cargo-cache --force
           cargo-cache -a clean-unref
       - save_cache:
           key: cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
@@ -347,7 +347,7 @@ jobs:
             curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-installer-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/macos/openaev-agent-installer-service-user-$version.sh"
             curl --fail-with-body -usamuel.hassine@filigran.io:$JFROG_TOKEN -T ./installer/macos/agent-upgrade-service-user.sh "https://filigran.jfrog.io/artifactory/openaev-agent/macos/openaev-agent-upgrade-service-user-$version.sh"
       - run: |
-          cargo install cargo-cache
+          cargo install cargo-cache --force
           cargo-cache -a clean-unref
       - save_cache:
           key: cargo-{{ arch }}-{{ checksum "Cargo.toml" }}
