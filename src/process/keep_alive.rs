@@ -32,8 +32,8 @@ pub fn ping(
                 service_name.clone(),
                 tenant_id.clone(),
             );
-            if register.is_err() {
-                error!("Fail registering the agent {}", register.unwrap_err())
+            if let Err(err) = register {
+                error!("Fail registering the agent {}", err)
             }
             // Wait for the next ping (2 minutes)
             sleep(Duration::from_secs(120));

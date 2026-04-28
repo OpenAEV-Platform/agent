@@ -28,8 +28,8 @@ pub fn listen(
                 execution_details.executed_by_user.clone(),
                 tenant_id.clone(),
             );
-            if jobs.is_ok() {
-                if let Ok(jobs) = jobs {
+            match jobs {
+                Ok(jobs) => {
                     jobs.iter().for_each(|j| {
                         info!("Start handling inject: {:?}", j.asset_agent_inject);
                         // 01. Remove the execution job
@@ -46,8 +46,9 @@ pub fn listen(
                         info!("Done handling inject: {:?}", j.asset_agent_inject);
                     });
                 }
-            } else {
-                error!("Fail getting jobs {}", jobs.unwrap_err())
+                Err(err) => {
+                    error!("Fail getting jobs {}", err)
+                }
             }
             // Wait for the next ping (30 secs)
             sleep(Duration::from_secs(30));
