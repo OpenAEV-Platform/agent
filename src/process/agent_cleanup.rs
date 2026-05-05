@@ -11,8 +11,6 @@ use std::{env, fs, thread};
 
 // Prefix for active execution directories (renamed to executed- after kill)
 const EXECUTION_PREFIX: &str = "execution-";
-// Prefix for implant directories (deleted directly after kill, no rename)
-const IMPLANT_PREFIX: &str = "implant-";
 // Prefix for directories pending permanent deletion
 const EXECUTED_PREFIX: &str = "executed-";
 
@@ -121,28 +119,6 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
             }
             // endregion
 
-            // region Handle old implant- directories (kill + delete directly, no rename)
-            let kill_implant_runtimes =
-                get_old_execution_directories("runtimes", IMPLANT_PREFIX, executing_max_time)
-                    .unwrap();
-            for dir in kill_implant_runtimes {
-                let dir_path = dir.path();
-                let dirname = dir_path.to_str().unwrap();
-                info!("[cleanup thread] Killing process for implant directory {dirname}");
-                kill_processes_for_directory(dirname);
-                info!("[cleanup thread] Removing implant directory {dirname}");
-                fs::remove_dir_all(dir_path).unwrap();
-            }
-            let remove_implant_payloads =
-                get_old_execution_directories("payloads", IMPLANT_PREFIX, executing_max_time)
-                    .unwrap();
-            for dir in remove_implant_payloads {
-                let dir_path = dir.path();
-                let dirname = dir_path.to_str().unwrap();
-                info!("[cleanup thread] Removing implant payload directory {dirname}");
-                fs::remove_dir_all(dir_path).unwrap();
-            }
-            // endregion
 
             // region Handle remove of old executed- directories
             let remove_runtimes_directories =
