@@ -9,3 +9,8 @@ installation_mode= "session-user"
 service_name = "OAEVAgentService"
 service_full_name = "OAEVAgentService"
 tenant_id = "ChangeMe"
+
+[cleanup]
+executing_max_time_minutes = 20
+directory_max_time_minutes = 2880
+cleanup_interval_seconds = 180
