@@ -106,6 +106,8 @@ fn create_cleanup_scripts() -> Result<(), Error> {
     if cfg!(target_os = "windows") {
         let script_file_name = base.join("openaev_agent_kill.ps1");
         let mut file = File::create(script_file_name)?;
+        // This script will take a specific path in parameter
+        // Base on this path, all process matching except grep and current script are detected and then killed
         file.write_all(
             "param ([Parameter(Mandatory)]$location); \
              $pids = Get-Process | Where-Object { $_.Path -and $_.Path -imatch [regex]::Escape($location) } | Select-Object -ExpandProperty Id; \
@@ -117,6 +119,8 @@ fn create_cleanup_scripts() -> Result<(), Error> {
     if cfg!(target_os = "linux") || cfg!(target_os = "macos") {
         let script_file_name = base.join("openaev_agent_kill.sh");
         let mut file = File::create(script_file_name)?;
+        // This script will take a specific path in parameter
+        // Base on this path, all process matching except grep and current script are detected and then killed
         file.write_all(
             "for pid in $(ps axwww -o pid,command | grep \"$1\" | grep -v openaev_agent_kill.sh | grep -v grep | awk '{print $1}'); do kill -9 \"$pid\"; done"
                 .as_bytes(),
