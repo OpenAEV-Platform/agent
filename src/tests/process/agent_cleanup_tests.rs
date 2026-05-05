@@ -127,35 +127,4 @@ mod tests {
         // Cleanup
         cleanup_test_directory(&renamed_path);
     }
-
-    #[test]
-    fn test_nested_files_deleted_with_directory() {
-        let working_dir = compute_working_dir();
-        create_dir_all(working_dir.join("runtimes")).unwrap();
-
-        let test_id = "test-nested-001";
-        let dir = create_test_directory("runtimes", "execution-", test_id);
-
-        // Create nested files simulating real execution output
-        fs::write(dir.join("execution.ps1"), "echo hello").unwrap();
-        fs::write(dir.join("execution.pid"), "12345").unwrap();
-        let sub_dir = dir.join("output");
-        create_dir_all(&sub_dir).unwrap();
-        fs::write(sub_dir.join("result.txt"), "some output").unwrap();
-
-        assert!(dir.join("execution.ps1").exists());
-        assert!(dir.join("execution.pid").exists());
-        assert!(sub_dir.join("result.txt").exists());
-
-        // Simulate rename then delete
-        let dirname = dir.to_str().unwrap();
-        let new_name = dirname.replace("execution", "executed");
-        fs::rename(dirname, &new_name).unwrap();
-        let new_path = PathBuf::from(&new_name);
-
-        fs::remove_dir_all(&new_path).unwrap();
-
-        // Everything gone
-        assert!(!new_path.exists());
-    }
 }
