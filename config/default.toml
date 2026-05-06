@@ -2,15 +2,15 @@ debug=false
 
 [openaev]
 url = "http://localhost:3001"
-token = "a2d56691-ab8b-4a99-816e-bec51d14056d"
+token = "ChangeMe"
 unsecured_certificate = false
 with_proxy = false
 installation_mode= "session-user"
 service_name = "OAEVAgentService"
 service_full_name = "OAEVAgentService"
-tenant_id = "2cffad3a-0001-4078-b0e2-ef74274022c3"
+tenant_id = "ChangeMe"
 
 [cleanup]
-executing_max_time_minutes = 2 # inject.execution.threshold.minutes default is 10minutes
-directory_max_time_minutes = 2 # default
-cleanup_interval_seconds = 30
+executing_max_time_minutes = 10 # inject.execution.threshold.minutes default is 10minutes
+directory_max_time_minutes = 10 # default
+cleanup_interval_seconds = 180
