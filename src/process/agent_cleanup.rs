@@ -119,7 +119,6 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
             }
             // endregion
 
-
             // region Handle remove of old executed- directories
             let remove_runtimes_directories =
                 get_old_execution_directories("runtimes", EXECUTED_PREFIX, directory_max_time)
