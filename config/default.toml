@@ -8,9 +8,9 @@ with_proxy = false
 installation_mode= "session-user"
 service_name = "OAEVAgentService"
 service_full_name = "OAEVAgentService"
-tenant_id = "ChangeMe"
+tenant_id = "2cffad3a-0001-4078-b0e2-ef74274022c3"
 
 [cleanup]
-executing_max_time_minutes = 10 # inject.execution.threshold.minutes default is 10minutes
-directory_max_time_minutes = 10 # default
-cleanup_interval_seconds = 180
+executing_max_time_minutes = 2 # inject.execution.threshold.minutes default is 10minutes
+directory_max_time_minutes = 2 # default
+cleanup_interval_seconds = 30

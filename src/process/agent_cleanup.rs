@@ -104,9 +104,10 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
             for dir in kill_runtimes_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
-                info!("[cleanup thread] Killing process for directory {dirname}");
+                info!("[cleanup thread] Killing process for runtime directory {dirname}");
                 kill_processes_for_directory(dirname);
                 // After kill, rename from execution to executed
+                info!("[cleanup thread] Renaming runtime directory {dirname}");
                 fs::rename(dirname, dirname.replace("execution", "executed")).unwrap();
             }
             let rename_payloads_directories =
@@ -115,6 +116,7 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
             for dir in rename_payloads_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
+                info!("[cleanup thread] Renaming payload directory {dirname}");
                 fs::rename(dirname, dirname.replace("execution", "executed")).unwrap();
             }
             // endregion
@@ -126,7 +128,7 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
             for dir in remove_runtimes_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
-                info!("[cleanup thread] Removing directory {dirname}");
+                info!("[cleanup thread] Removing runtime directory {dirname}");
                 fs::remove_dir_all(dir_path).unwrap()
             }
             let remove_payloads_directories =
@@ -135,7 +137,7 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
             for dir in remove_payloads_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
-                info!("[cleanup thread] Removing directory {dirname}");
+                info!("[cleanup thread] Removing payload directory {dirname}");
                 fs::remove_dir_all(dir_path).unwrap()
             }
             // endregion
