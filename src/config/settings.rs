@@ -18,10 +18,10 @@ pub struct OpenAEV {
 }
 
 fn default_executing_max_time_minutes() -> u64 {
-    20
+    10
 }
 fn default_directory_max_time_minutes() -> u64 {
-    2880
+    10
 }
 fn default_cleanup_interval_seconds() -> u64 {
     180
