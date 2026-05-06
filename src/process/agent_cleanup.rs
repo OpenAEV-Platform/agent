@@ -1,3 +1,4 @@
+use crate::config::settings::CleanupSettings;
 use crate::THREADS_CONTROL;
 use log::info;
 use std::fs::{DirEntry, File};
@@ -8,12 +9,10 @@ use std::thread::{sleep, JoinHandle};
 use std::time::{Duration, SystemTime};
 use std::{env, fs, thread};
 
-// The executing max time will prevent started process to remains active.
-// After X minutes define in this constant, all process under 'execution-' sub dirs will be killed
-static EXECUTING_MAX_TIME: u64 = 20; // 20 minutes
-                                     // The storing directory max time will prevent too much disk space usage.
-                                     // After X minutes define in this constant, all dir matching 'execution-' will be removed
-static DIRECTORY_MAX_TIME: u64 = 2880; // 2 days
+// Prefix for active execution directories (renamed to executed- after kill)
+const EXECUTION_PREFIX: &str = "execution-";
+// Prefix for directories pending permanent deletion
+const EXECUTED_PREFIX: &str = "executed-";
 
 fn get_old_execution_directories(
     subfolder: &str,
@@ -21,9 +20,14 @@ fn get_old_execution_directories(
     since_minutes: u64,
 ) -> Result<Vec<DirEntry>, Error> {
     let now = SystemTime::now();
-    let current_exe_patch = env::current_exe().unwrap();
-    let executable_path = current_exe_patch.parent().unwrap();
-    let entries = fs::read_dir(executable_path.join(subfolder)).unwrap();
+    let current_exe_patch = env::current_exe()?;
+    let executable_path = current_exe_patch.parent().ok_or_else(|| {
+        Error::new(
+            std::io::ErrorKind::NotFound,
+            "Cannot resolve parent directory of current executable",
+        )
+    })?;
+    let entries = fs::read_dir(executable_path.join(subfolder))?;
     entries
         .into_iter()
         .filter(|entry| {
@@ -60,71 +64,85 @@ fn create_cleanup_scripts() {
     }
 }
 
-pub fn clean() -> Result<JoinHandle<()>, Error> {
+fn kill_processes_for_directory(dirname: &str) {
+    let escaped_dirname = format!("\"{dirname}\"");
+    if cfg!(target_os = "windows") {
+        Command::new("powershell")
+            .args([
+                "-ExecutionPolicy",
+                "Bypass",
+                "openaev_agent_kill.ps1",
+                escaped_dirname.as_str(),
+            ])
+            .output()
+            .unwrap();
+    }
+    if cfg!(target_os = "linux") || cfg!(target_os = "macos") {
+        Command::new("bash")
+            .args(["openaev_agent_kill.sh", dirname])
+            .output()
+            .unwrap();
+    }
+}
+
+pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
     info!("Starting cleanup thread");
     let handle = thread::spawn(move || {
         // Create the expected script per operating system.
         create_cleanup_scripts();
+
+        let executing_max_time = cleanup.executing_max_time_minutes;
+        let directory_max_time = cleanup.directory_max_time_minutes;
+        let cleanup_interval = cleanup.cleanup_interval_seconds;
+
         // While no stop signal received
         while THREADS_CONTROL.load(Ordering::Relaxed) {
-            let kill_runtimes_directories =
-                get_old_execution_directories("runtimes", "execution-", EXECUTING_MAX_TIME)
-                    .unwrap();
             // region Handle killing old execution- directories
+            let kill_runtimes_directories =
+                get_old_execution_directories("runtimes", EXECUTION_PREFIX, executing_max_time)
+                    .unwrap();
             for dir in kill_runtimes_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
-                info!("[cleanup thread] Killing process for directory {dirname}");
-                let escaped_dirname = format!("\"{dirname}\"");
-                if cfg!(target_os = "windows") {
-                    Command::new("powershell")
-                        .args([
-                            "-ExecutionPolicy",
-                            "Bypass",
-                            "openaev_agent_kill.ps1",
-                            escaped_dirname.as_str(),
-                        ])
-                        .output()
-                        .unwrap();
-                }
-                if cfg!(target_os = "linux") || cfg!(target_os = "macos") {
-                    Command::new("bash")
-                        .args(["openaev_agent_kill.sh", dirname])
-                        .output()
-                        .unwrap();
-                }
+                info!("[cleanup thread] Killing process for runtime directory {dirname}");
+                kill_processes_for_directory(dirname);
                 // After kill, rename from execution to executed
+                info!("[cleanup thread] Renaming runtime directory {dirname}");
                 fs::rename(dirname, dirname.replace("execution", "executed")).unwrap();
             }
             let rename_payloads_directories =
-                get_old_execution_directories("payloads", "execution-", EXECUTING_MAX_TIME)
+                get_old_execution_directories("payloads", EXECUTION_PREFIX, executing_max_time)
                     .unwrap();
             for dir in rename_payloads_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
+                info!("[cleanup thread] Renaming payload directory {dirname}");
                 fs::rename(dirname, dirname.replace("execution", "executed")).unwrap();
             }
             // endregion
+
             // region Handle remove of old executed- directories
             let remove_runtimes_directories =
-                get_old_execution_directories("runtimes", "executed-", DIRECTORY_MAX_TIME).unwrap();
+                get_old_execution_directories("runtimes", EXECUTED_PREFIX, directory_max_time)
+                    .unwrap();
             for dir in remove_runtimes_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
-                info!("[cleanup thread] Removing directory {dirname}");
+                info!("[cleanup thread] Removing runtime directory {dirname}");
                 fs::remove_dir_all(dir_path).unwrap()
             }
             let remove_payloads_directories =
-                get_old_execution_directories("payloads", "executed-", DIRECTORY_MAX_TIME).unwrap();
+                get_old_execution_directories("payloads", EXECUTED_PREFIX, directory_max_time)
+                    .unwrap();
             for dir in remove_payloads_directories {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
-                info!("[cleanup thread] Removing directory {dirname}");
+                info!("[cleanup thread] Removing payload directory {dirname}");
                 fs::remove_dir_all(dir_path).unwrap()
             }
             // endregion
-            // Wait for the next cleanup (3 minutes)
-            sleep(Duration::from_secs(3 * 60));
+            // Wait for the next cleanup
+            sleep(Duration::from_secs(cleanup_interval));
         }
     });
     Ok(handle)
