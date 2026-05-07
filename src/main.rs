@@ -95,7 +95,7 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
         execution_details.clone(),
     );
     // Starts the cleanup thread
-    let cleanup_thread = agent_cleanup::clean();
+    let cleanup_thread = agent_cleanup::clean(settings_data.cleanup.clone());
     // Don't stop the exec until the listening thread is done
     Ok(vec![
         keep_alive_thread.unwrap(),
