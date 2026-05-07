@@ -8,6 +8,7 @@ use std::thread;
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
 
+#[allow(clippy::too_many_arguments)]
 pub fn ping(
     uri: String,
     token: String,
