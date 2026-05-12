@@ -5,7 +5,7 @@ use std::env;
 const ENV_PRODUCTION: &str = "production";
 const ENV_PRODUCTION_CONFIG_FILE: &str = "openaev-agent-config";
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 #[allow(unused)]
 pub struct OpenAEV {
     pub url: String,
@@ -17,11 +17,42 @@ pub struct OpenAEV {
     pub tenant_id: String,
 }
 
-#[derive(Debug, Deserialize)]
+fn default_executing_max_time_minutes() -> u64 {
+    10
+}
+fn default_directory_max_time_minutes() -> u64 {
+    10
+}
+fn default_cleanup_interval_seconds() -> u64 {
+    180
+}
+#[derive(Debug, Deserialize, Clone)]
+pub struct CleanupSettings {
+    #[serde(default = "default_executing_max_time_minutes")]
+    pub executing_max_time_minutes: u64,
+    #[serde(default = "default_directory_max_time_minutes")]
+    pub directory_max_time_minutes: u64,
+    #[serde(default = "default_cleanup_interval_seconds")]
+    pub cleanup_interval_seconds: u64,
+}
+
+impl Default for CleanupSettings {
+    fn default() -> Self {
+        Self {
+            executing_max_time_minutes: default_executing_max_time_minutes(),
+            directory_max_time_minutes: default_directory_max_time_minutes(),
+            cleanup_interval_seconds: default_cleanup_interval_seconds(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
 #[allow(unused)]
 pub struct Settings {
     pub debug: bool,
     pub openaev: OpenAEV,
+    #[serde(default)]
+    pub cleanup: CleanupSettings,
 }
 
 impl Settings {
