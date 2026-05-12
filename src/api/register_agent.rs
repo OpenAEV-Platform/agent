@@ -116,7 +116,7 @@ impl Client {
                 }
             }
             Err(err) => {
-                error!("Error API register_agent {}", err.to_string());
+                error!("Error API register_agent {}", err);
                 Err(Error::Internal(err.to_string()))
             }
         }
