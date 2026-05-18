@@ -58,6 +58,7 @@ impl Client {
         executed_by_user: String,
         installation_mode: String,
         service_name: String,
+        tenant_id: String,
     ) -> Result<RegisterAgentResponse, Error> {
         // region Build the content to register
         let networks = NetworkInterface::show().unwrap();
@@ -99,7 +100,8 @@ impl Client {
         });
         // endregion
         // Post the input to the OpenAEV API
-        match self.post("/api/endpoints/register").json(&post_data).send() {
+        let register_endpoint = format!("/api/tenants/{}/endpoints/register", tenant_id);
+        match self.post(&register_endpoint).json(&post_data).send() {
             Ok(response) => {
                 if response.status().is_success() {
                     response

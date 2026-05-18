@@ -7,6 +7,7 @@ user="$(id -un)"
 group="$(id -gn)"
 
 install_dir="${OPENAEV_INSTALL_DIR}-${user}"
+tenant_id="${OPENAEV_TENANT_ID}"
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
 if [ "${os}" = "darwin" ]; then
@@ -22,7 +23,7 @@ echo "Starting upgrade script for ${os} | ${architecture}"
 
 echo "01. Downloading OpenAEV Agent into ${install_dir}..."
 (mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
-curl -sSfL ${base_url}/api/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
 mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
 chmod +x ${install_dir}/openaev-agent
 
@@ -37,6 +38,7 @@ unsecured_certificate = "${OPENAEV_UNSECURED_CERTIFICATE}"
 with_proxy = "${OPENAEV_WITH_PROXY}"
 installation_mode = "service-user"
 service_name = "${OPENAEV_SERVICE_NAME}"
+tenant_id = "${OPENAEV_TENANT_ID}"
 EOF
 
 echo "03. Kill the process of the existing service"

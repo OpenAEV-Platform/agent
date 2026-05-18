@@ -12,7 +12,7 @@ switch ($env:PROCESSOR_ARCHITECTURE)
     }
 }
 if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR_ARCHITECTURE is not supported yet, please create a ticket in openaev github project" }
-function Sanitize-UserName {
+function ConvertTo-SafeUserName {
     param(
         [Parameter(Mandatory = $true)]
         [string]$UserName
@@ -23,7 +23,7 @@ function Sanitize-UserName {
 }
 $BasePath = "${OPENAEV_INSTALL_DIR}";
 $User = whoami;
-$SanitizedUser =  Sanitize-UserName -UserName $user;
+$SanitizedUser =  ConvertTo-SafeUserName -UserName $user;
 $isElevated = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($isElevated) {
     $AgentName = "${OPENAEV_SERVICE_NAME}-Administrator-$SanitizedUser"
@@ -50,8 +50,8 @@ if(Test-Path "$OpenAEVPath")
 {
 # Upgrade the agent if the folder *openaev* exists
 Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
-Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/package/openaev/windows/${architecture}/session-user" -OutFile "openaev-installer-session-user.exe";
-./openaev-installer-session-user.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$CleanBasePath";
+Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/session-user" -OutFile "openaev-installer-session-user.exe";
+./openaev-installer-session-user.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$CleanBasePath" ~TENANT_ID="${OPENAEV_TENANT_ID}";
 }
 else
 {
@@ -60,25 +60,25 @@ $installationDir=[System.Uri]::EscapeDataString("$OpenAEVPath")
 $OpenAEVService = "${OPENAEV_SERVICE_NAME}" -replace "openbas", "openaev"
 $OpenAEVService = "$OpenAEVService" -replace "OBAS", "OAEV"
 $serviceName=[System.Uri]::EscapeDataString("$OpenAEVService")
-Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/installer/openaev/windows/session-user/${OPENAEV_TOKEN}?installationDir=$installationDir&amp;serviceName=$serviceName" -OutFile "openaev-installer.ps1";
+Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/installer/openaev/windows/session-user/${OPENAEV_TOKEN}?installationDir=$installationDir&amp;serviceName=$serviceName" -OutFile "openaev-installer.ps1";
 ./openaev-installer.ps1
 $AgentPath = $AgentPath -replace "openaev", "openbas"
 $AgentPath = $AgentPath -replace "OAEV", "OBAS"
 Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "OAEV", "OBAS"
-rm -force "${UninstallDir}/openbas.ico"
-rm -force "${UninstallDir}/openbas_agent_kill.ps1"
-rm -force "${UninstallDir}/openbas_agent_start.ps1"
-rm -force "${UninstallDir}/openbas-agent.exe"
-rm -force "${UninstallDir}/openbas-agent-config.toml"
-rm -force "${UninstallDir}/uninstall.exe"
+Remove-Item -Force "${UninstallDir}/openbas.ico"
+Remove-Item -Force "${UninstallDir}/openbas_agent_kill.ps1"
+Remove-Item -Force "${UninstallDir}/openbas_agent_start.ps1"
+Remove-Item -Force "${UninstallDir}/openbas-agent.exe"
+Remove-Item -Force "${UninstallDir}/openbas-agent-config.toml"
+Remove-Item -Force "${UninstallDir}/uninstall.exe"
 if ($isElevated) {
     schtasks.exe /End /TN "$AgentName"
     schtasks.exe /Delete /TN "$AgentName" /F
 } else {
     Remove-ItemProperty -Path "HKCU:\Software\Microsoft\Windows\CurrentVersion\Run" -Name "$AgentName"
 }
-rm -force ./openaev-installer.ps1
+Remove-Item -Force ./openaev-installer.ps1
 }
-rm -force ./openaev-installer-session-user.exe;
+Remove-Item -Force ./openaev-installer-session-user.exe;

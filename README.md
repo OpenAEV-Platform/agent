@@ -116,6 +116,22 @@ Audit is included in CI to block new vulnerabilities.
 
 ---
 
+### PSScriptAnalyzer (Windows installer scripts)
+
+The PowerShell installer scripts under `installer/windows/` are linted with [PSScriptAnalyzer](https://github.com/PowerShell/PSScriptAnalyzer).
+
+Run the linter locally (requires PowerShell 5.1+ or PowerShell 7+):
+
+```powershell
+.\installer\windows\Run-Lint.ps1
+```
+
+The script will automatically install `PSScriptAnalyzer` from the PowerShell Gallery if it is not already present, then analyze every `.ps1` file in `installer/windows/` using the settings defined in `installer/windows/PSScriptAnalyzerSettings.psd1`.
+
+PSScriptAnalyzer runs in CI — the pipeline will fail if any issues are reported.
+
+---
+
 ## 🧪 Tests in CI
 
 All tests are run automatically in the CI pipeline using:

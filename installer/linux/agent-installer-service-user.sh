@@ -55,6 +55,7 @@ os=$(uname | tr '[:upper:]' '[:lower:]')
 systemd_status=$(systemctl is-system-running)
 install_dir="$HOME/${OPENAEV_INSTALL_DIR}-${user}"
 service_name="${user}-${OPENAEV_SERVICE_NAME}"
+tenant_id="${OPENAEV_TENANT_ID}"
 
 
 if [ "${os}" != "linux" ]; then
@@ -76,7 +77,7 @@ systemctl stop ${service_name} || echo "Fail stopping ${service_name}"
 
 echo "02. Downloading OpenAEV Agent into ${install_dir}..."
 (mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
-curl -sSfL ${base_url}/api/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
 chmod +x ${install_dir}/openaev-agent
 
 echo "03. Creating OpenAEV configuration file"
@@ -90,6 +91,7 @@ unsecured_certificate = "${OPENAEV_UNSECURED_CERTIFICATE}"
 with_proxy = "${OPENAEV_WITH_PROXY}"
 installation_mode = "service-user"
 service_name = "${OPENAEV_SERVICE_NAME}"
+tenant_id = "${OPENAEV_TENANT_ID}"
 EOF
 
 echo "04. Writing agent service"

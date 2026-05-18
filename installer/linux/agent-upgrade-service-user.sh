@@ -7,6 +7,7 @@ systemd_status=$(systemctl is-system-running)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
 session_name="${OPENAEV_SERVICE_NAME}"
+tenant_id="${OPENAEV_TENANT_ID}"
 
 # Check if OPENAEV_INSTALL_DIR is an absolute path (starts with /)
 case "${OPENAEV_INSTALL_DIR}" in
@@ -35,7 +36,7 @@ fi
 echo "Starting upgrade script for ${os} | ${architecture}"
 
 echo "01. Downloading OpenAEV Agent into ${install_dir}..."
-curl -sSfL ${base_url}/api/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
 mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
 chmod +x ${install_dir}/openaev-agent
 
@@ -50,6 +51,7 @@ unsecured_certificate = "${OPENAEV_UNSECURED_CERTIFICATE}"
 with_proxy = "${OPENAEV_WITH_PROXY}"
 installation_mode = "session-user"
 service_name = "${OPENAEV_SERVICE_NAME}"
+tenant_id = "${OPENAEV_TENANT_ID}"
 EOF
 
 echo "03. Restarting the service"

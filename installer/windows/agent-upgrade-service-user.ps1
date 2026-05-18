@@ -12,7 +12,7 @@ switch ($env:PROCESSOR_ARCHITECTURE)
     }
 }
 
-function Sanitize-UserName {
+function ConvertTo-SafeUserName {
     param(
         [Parameter(Mandatory = $true)]
         [string]$UserName
@@ -26,7 +26,7 @@ if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR
 
 $BasePath = "${OPENAEV_INSTALL_DIR}";
 $User = whoami;
-$SanitizedUser = Sanitize-UserName -UserName $user;
+$SanitizedUser = ConvertTo-SafeUserName -UserName $user;
 $ServiceName = "${OPENAEV_SERVICE_NAME}";
 $AgentName = "$ServiceName-$SanitizedUser";
 
@@ -42,11 +42,11 @@ if ($BasePath -match "\\$ServiceName-[^\\]+$" -or $BasePath -match "/$ServiceNam
 $AgentPath = $InstallDir + "\openaev-agent.exe";
 $AgentUpgradedPath = $InstallDir + "\openaev-agent_upgrade.exe";
 
-Invoke-WebRequest -Uri "${OPENAEV_URL}/api/agent/executable/openaev/windows/${architecture}" -OutFile $AgentUpgradedPath;
+Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/executable/openaev/windows/${architecture}" -OutFile $AgentUpgradedPath;
 
 sc.exe stop $AgentName;
 
-rm -force $AgentPath;
-mv $AgentUpgradedPath $AgentPath;
+Remove-Item -Force $AgentPath;
+Move-Item $AgentUpgradedPath $AgentPath;
 
 sc.exe start $AgentName;
