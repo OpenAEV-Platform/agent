@@ -1,0 +1,250 @@
+name: "[Agent] CI"
+
+on:
+  push:
+    branches: [main, release/current]
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+  pull_request:
+    branches: [main, release/current]
+
+jobs:
+  build:
+    name: ${{ github.event_name == 'push' && 'Build & Deploy' || 'Build' }} (${{ matrix.os }}-${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
+    env:
+      IS_MUSL_UBUNTU: ${{ (matrix.os == 'ubuntu' && contains(matrix.target, 'musl')) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu
+            arch: x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            jfrog_path: linux/x86_64
+            jfrog_scripts_path: linux
+            installer_dir: installer/linux
+          - os: ubuntu
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            jfrog_path: linux/arm64
+            jfrog_scripts_path: linux
+            installer_dir: installer/linux
+          - os: windows
+            arch: x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            jfrog_path: windows/x86_64
+            jfrog_scripts_path: windows
+            installer_dir: installer/windows
+          - os: windows
+            arch: arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            jfrog_path: windows/arm64
+            jfrog_scripts_path: windows
+            installer_dir: installer/windows
+          - os: macos
+            arch: x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            jfrog_path: macos/x86_64
+            jfrog_scripts_path: macos
+            installer_dir: installer/macos
+          - os: macos
+            arch: arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            jfrog_path: macos/arm64
+            jfrog_scripts_path: macos
+            installer_dir: installer/macos
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install musl-tools
+        if: env.IS_MUSL_UBUNTU == 'true'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Install NSIS (Windows)
+        if: matrix.os == 'windows'
+        run: choco install -y nsis
+        shell: pwsh
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: clippy,rustfmt
+
+      - name: Cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Run cargo fmt
+        run: cargo fmt -- --check
+
+      - name: Run cargo clippy
+        run: cargo clippy --target=${{ matrix.target }} -- -D warnings
+
+      - name: Lint PowerShell installer scripts (PSScriptAnalyzer)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: ./installer/windows/Run-Lint.ps1
+
+      - name: Install cargo audit
+        run: |
+          if [ -x "$HOME/.cargo/bin/cargo-audit" ] || [ -x "$USERPROFILE\.cargo\bin\cargo-audit.exe" ]; then
+            echo "cargo-audit already installed."
+          else
+            cargo install cargo-audit --locked
+          fi
+        shell: bash
+
+      - name: Run cargo audit
+        run: cargo audit
+
+      - name: Build (release)
+        if: github.event_name == 'push'
+        run: |
+          RUSTFLAGS="-C strip=symbols"
+          if [[ "${{ matrix.os }}" == "windows" ]]; then
+            RUSTFLAGS="$RUSTFLAGS -C target-feature=+crt-static"
+          fi
+          export RUSTFLAGS
+          cargo build --target=${{ matrix.target }} --release --locked
+        shell: bash
+
+      - name: Build (debug)
+        if: github.event_name != 'push'
+        run: |
+          if [[ "${{ matrix.os }}" == "windows" ]]; then
+            export RUSTFLAGS="-C target-feature=+crt-static"
+          fi
+          cargo build --target=${{ matrix.target }} --locked
+        shell: bash
+
+      - name: Test (release)
+        if: github.event_name == 'push'
+        run: cargo test --target=${{ matrix.target }} --release --locked
+
+      - name: Test (debug)
+        if: github.event_name != 'push'
+        run: cargo test --target=${{ matrix.target }} --locked
+
+      - name: Build agent installers with NSIS (Windows)
+        if: matrix.os == 'windows' && github.event_name == 'push'
+        shell: pwsh
+        run: |
+          $env:AGENT_BINARY = "${{ github.workspace }}\target\${{ matrix.target }}\release\openaev-agent.exe"
+          $installers = @(
+            "agent-installer.nsi",
+            "agent-installer-service-user.nsi",
+            "agent-installer-session-user.nsi"
+          )
+          foreach ($nsi in $installers) {
+            & "C:\Program Files (x86)\NSIS\Bin\makensis.exe" "./installer/windows/$nsi"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "makensis failed for $nsi with exit code $LASTEXITCODE"
+              exit 1
+            }
+          }
+
+      - name: Install cargo cache
+        run: |
+          if [ -x "$HOME/.cargo/bin/cargo-cache" ] || [ -x "$USERPROFILE\.cargo\bin\cargo-cache.exe" ]; then
+            echo "cargo-cache already installed."
+          else
+            cargo install cargo-cache --locked
+          fi
+        shell: bash
+
+      - name: Run cargo cache
+        run: cargo cache -a -l || true
+        shell: bash
+
+      - name: Push to JFrog (binary + shell scripts)
+        if: github.event_name == 'push' && matrix.os != 'windows'
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME}"
+          elif [ "${GITHUB_REF_NAME}" = "main" ]; then
+            version="latest"
+          else
+            version="prerelease"
+          fi
+
+          base="https://filigran.jfrog.io/artifactory/openaev-agent"
+          creds="samuel.hassine@filigran.io:${{ secrets.JFROG_TOKEN }}"
+
+          # Binary
+          curl --fail-with-body -u "$creds" \
+            -T ./target/${{ matrix.target }}/release/openaev-agent \
+            "$base/${{ matrix.jfrog_path }}/openaev-agent-$version"
+
+          # Installer / upgrade shell scripts (only need to be pushed once per OS;
+          # we push from both archs to keep parity with the previous CircleCI pipeline)
+          for script in \
+            agent-installer.sh \
+            agent-upgrade.sh \
+            agent-installer-session-user.sh \
+            agent-upgrade-session-user.sh \
+            agent-installer-service-user.sh \
+            agent-upgrade-service-user.sh; do
+            curl --fail-with-body -u "$creds" \
+              -T "./${{ matrix.installer_dir }}/$script" \
+              "$base/${{ matrix.jfrog_scripts_path }}/openaev-${script%.sh}-$version.sh"
+          done
+
+      - name: Push to JFrog (Windows binary + installers + scripts)
+        if: github.event_name == 'push' && matrix.os == 'windows'
+        shell: bash
+        run: |
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            version="${GITHUB_REF_NAME}"
+          elif [ "${GITHUB_REF_NAME}" = "main" ]; then
+            version="latest"
+          else
+            version="prerelease"
+          fi
+
+          base="https://filigran.jfrog.io/artifactory/openaev-agent"
+          creds="samuel.hassine@filigran.io:${{ secrets.JFROG_TOKEN }}"
+
+          # Binary
+          curl --fail-with-body -u "$creds" \
+            -T ./target/${{ matrix.target }}/release/openaev-agent.exe \
+            "$base/${{ matrix.jfrog_path }}/openaev-agent-$version.exe"
+
+          # NSIS installer executables (arch-specific)
+          for installer in \
+            agent-installer.exe \
+            agent-installer-session-user.exe \
+            agent-installer-service-user.exe; do
+            curl --fail-with-body -u "$creds" \
+              -T "./installer/windows/$installer" \
+              "$base/${{ matrix.jfrog_path }}/openaev-${installer%.exe}-$version.exe"
+          done
+
+          # PowerShell installer / upgrade scripts (arch-independent)
+          for script in \
+            agent-installer.ps1 \
+            agent-upgrade.ps1 \
+            agent-installer-session-user.ps1 \
+            agent-upgrade-session-user.ps1 \
+            agent-installer-service-user.ps1 \
+            agent-upgrade-service-user.ps1; do
+            curl --fail-with-body -u "$creds" \
+              -T "./installer/windows/$script" \
+              "$base/${{ matrix.jfrog_scripts_path }}/openaev-${script%.ps1}-$version.ps1"
+          done
