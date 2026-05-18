@@ -145,7 +145,15 @@ jobs:
         if: matrix.os == 'windows' && github.event_name == 'push'
         shell: pwsh
         run: |
-          $env:AGENT_BINARY = "${{ github.workspace }}\target\${{ matrix.target }}\release\openaev-agent.exe"
+          # The .nsi files reference ..\..\target\release\openaev-agent.exe (the
+          # default unflavored release dir). Because we build with --target=...,
+          # the binary actually lives in target/<triple>/release/. Copy it to the
+          # legacy path so makensis can find it.
+          New-Item -ItemType Directory -Force -Path "./target/release" | Out-Null
+          Copy-Item -Force `
+            "./target/${{ matrix.target }}/release/openaev-agent.exe" `
+            "./target/release/openaev-agent.exe"
+
           $installers = @(
             "agent-installer.nsi",
             "agent-installer-service-user.nsi",
