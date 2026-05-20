@@ -8,9 +8,21 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # Build, lint, test the agent for every (os, arch) target.
+  # The same job runs identically for PRs, push to main, and tags —
+  # only the artifact names differ via the matrix.
+  # ──────────────────────────────────────────────────────────────────
   build:
-    name: ${{ github.event_name == 'push' && 'Build & Deploy' || 'Build' }} (${{ matrix.os }}-${{ matrix.arch }})
+    name: "Build (${{ matrix.os }}-${{ matrix.arch }})"
     runs-on: ${{ matrix.runner }}
     env:
       IS_MUSL_UBUNTU: ${{ (matrix.os == 'ubuntu' && contains(matrix.target, 'musl')) }}
@@ -114,7 +126,6 @@ jobs:
         run: cargo audit
 
       - name: Build (release)
-        if: github.event_name == 'push'
         run: |
           RUSTFLAGS="-C strip=symbols"
           if [[ "${{ matrix.os }}" == "windows" ]]; then
@@ -124,25 +135,11 @@ jobs:
           cargo build --target=${{ matrix.target }} --release --locked
         shell: bash
 
-      - name: Build (debug)
-        if: github.event_name != 'push'
-        run: |
-          if [[ "${{ matrix.os }}" == "windows" ]]; then
-            export RUSTFLAGS="-C target-feature=+crt-static"
-          fi
-          cargo build --target=${{ matrix.target }} --locked
-        shell: bash
-
       - name: Test (release)
-        if: github.event_name == 'push'
         run: cargo test --target=${{ matrix.target }} --release --locked
 
-      - name: Test (debug)
-        if: github.event_name != 'push'
-        run: cargo test --target=${{ matrix.target }} --locked
-
       - name: Build agent installers with NSIS (Windows)
-        if: matrix.os == 'windows' && github.event_name == 'push'
+        if: matrix.os == 'windows'
         shell: pwsh
         run: |
           # The .nsi files reference ..\..\target\release\openaev-agent.exe (the
@@ -180,71 +177,128 @@ jobs:
         run: cargo cache -a -l || true
         shell: bash
 
-      - name: Push to JFrog (binary + shell scripts)
-        if: github.event_name == 'push' && matrix.os != 'windows'
+      # ──────────────────────────────────────────────────────────────
+      # Stage artifacts for downstream promotion.
+      #
+      # Each matrix job uploads a flat directory layout matching the
+      # JFrog destination paths so the downstream workflow only needs
+      # to append the version suffix and PUT each file.
+      #
+      # Layout for the per-target artifact (agent-bin-<os>-<arch>):
+      #   <jfrog_path>/openaev-agent[.exe]               binary
+      #   <jfrog_path>/openaev-agent-installer.exe       (Windows only)
+      #   <jfrog_path>/openaev-agent-installer-service-user.exe
+      #   <jfrog_path>/openaev-agent-installer-session-user.exe
+      # ──────────────────────────────────────────────────────────────
+      - name: Stage binary + Windows installers for upload
         shell: bash
         run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            version="${GITHUB_REF_NAME}"
-          elif [ "${GITHUB_REF_NAME}" = "main" ]; then
-            version="latest"
+          set -euo pipefail
+          STAGE="staging/${{ matrix.jfrog_path }}"
+          mkdir -p "$STAGE"
+
+          if [[ "${{ matrix.os }}" == "windows" ]]; then
+            cp "./target/${{ matrix.target }}/release/openaev-agent.exe" \
+               "$STAGE/openaev-agent.exe"
+            for installer in agent-installer.exe \
+                             agent-installer-service-user.exe \
+                             agent-installer-session-user.exe; do
+              cp "./installer/windows/$installer" "$STAGE/openaev-$installer"
+            done
           else
-            version="prerelease"
+            cp "./target/${{ matrix.target }}/release/openaev-agent" \
+               "$STAGE/openaev-agent"
           fi
 
-          base="https://filigran.jfrog.io/artifactory/openaev-agent"
-          creds="samuel.hassine@filigran.io:${{ secrets.JFROG_TOKEN }}"
+          ls -la "$STAGE"
 
-          # Binary
-          curl --fail-with-body -u "$creds" \
-            -T ./target/${{ matrix.target }}/release/openaev-agent \
-            "$base/${{ matrix.jfrog_path }}/openaev-agent-$version"
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-bin-${{ matrix.os }}-${{ matrix.arch }}
+          path: staging/
+          if-no-files-found: error
+          retention-days: 14
 
-          # Installer / upgrade shell scripts (only need to be pushed once per OS;
-          # we push from both archs to keep parity with the previous CircleCI pipeline)
-          for script in \
-            agent-installer.sh \
-            agent-upgrade.sh \
-            agent-installer-session-user.sh \
-            agent-upgrade-session-user.sh \
-            agent-installer-service-user.sh \
-            agent-upgrade-service-user.sh; do
-            curl --fail-with-body -u "$creds" \
-              -T "./${{ matrix.installer_dir }}/$script" \
-              "$base/${{ matrix.jfrog_scripts_path }}/openaev-${script%.sh}-$version.sh"
-          done
+  # ──────────────────────────────────────────────────────────────────
+  # Code coverage (Linux only) — generates lcov.info via cargo-llvm-cov
+  # and uploads it to Codecov.
+  # ──────────────────────────────────────────────────────────────────
+  coverage:
+    name: "Coverage"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
 
-      - name: Push to JFrog (Windows binary + installers + scripts)
-        if: github.event_name == 'push' && matrix.os == 'windows'
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-coverage-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Generate coverage (lcov)
+        run: |
+          cargo llvm-cov --workspace --all-features --locked \
+            --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          flags: agent
+          disable_search: true
+          fail_ci_if_error: false
+
+  # ──────────────────────────────────────────────────────────────────
+  # OS-level installer / upgrade scripts (arch-independent).
+  # Uploaded once per OS so the downstream workflow does not need to
+  # deduplicate matrix outputs.
+  # ──────────────────────────────────────────────────────────────────
+  package-scripts:
+    name: "Package installer scripts"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Stage scripts
         shell: bash
         run: |
-          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
-            version="${GITHUB_REF_NAME}"
-          elif [ "${GITHUB_REF_NAME}" = "main" ]; then
-            version="latest"
-          else
-            version="prerelease"
-          fi
+          set -euo pipefail
+          mkdir -p staging/linux staging/macos staging/windows
 
-          base="https://filigran.jfrog.io/artifactory/openaev-agent"
-          creds="samuel.hassine@filigran.io:${{ secrets.JFROG_TOKEN }}"
-
-          # Binary
-          curl --fail-with-body -u "$creds" \
-            -T ./target/${{ matrix.target }}/release/openaev-agent.exe \
-            "$base/${{ matrix.jfrog_path }}/openaev-agent-$version.exe"
-
-          # NSIS installer executables (arch-specific)
-          for installer in \
-            agent-installer.exe \
-            agent-installer-session-user.exe \
-            agent-installer-service-user.exe; do
-            curl --fail-with-body -u "$creds" \
-              -T "./installer/windows/$installer" \
-              "$base/${{ matrix.jfrog_path }}/openaev-${installer%.exe}-$version.exe"
+          # Linux / macOS shell scripts
+          for os in linux macos; do
+            for script in \
+              agent-installer.sh \
+              agent-upgrade.sh \
+              agent-installer-session-user.sh \
+              agent-upgrade-session-user.sh \
+              agent-installer-service-user.sh \
+              agent-upgrade-service-user.sh; do
+              cp "./installer/${os}/${script}" \
+                 "staging/${os}/openaev-${script%.sh}.sh"
+            done
           done
 
-          # PowerShell installer / upgrade scripts (arch-independent)
+          # Windows PowerShell scripts
           for script in \
             agent-installer.ps1 \
             agent-upgrade.ps1 \
@@ -252,7 +306,16 @@ jobs:
             agent-upgrade-session-user.ps1 \
             agent-installer-service-user.ps1 \
             agent-upgrade-service-user.ps1; do
-            curl --fail-with-body -u "$creds" \
-              -T "./installer/windows/$script" \
-              "$base/${{ matrix.jfrog_scripts_path }}/openaev-${script%.ps1}-$version.ps1"
+            cp "./installer/windows/${script}" \
+               "staging/windows/openaev-${script%.ps1}.ps1"
           done
+
+          find staging -type f
+
+      - name: Upload scripts artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-scripts
+          path: staging/
+          if-no-files-found: error
+          retention-days: 14
