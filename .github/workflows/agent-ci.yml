@@ -1,0 +1,321 @@
+name: "[Agent] CI"
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # Build, lint, test the agent for every (os, arch) target.
+  # The same job runs identically for PRs, push to main, and tags —
+  # only the artifact names differ via the matrix.
+  # ──────────────────────────────────────────────────────────────────
+  build:
+    name: "Build (${{ matrix.os }}-${{ matrix.arch }})"
+    runs-on: ${{ matrix.runner }}
+    env:
+      IS_MUSL_UBUNTU: ${{ (matrix.os == 'ubuntu' && contains(matrix.target, 'musl')) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu
+            arch: x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+            jfrog_path: linux/x86_64
+            jfrog_scripts_path: linux
+            installer_dir: installer/linux
+          - os: ubuntu
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+            jfrog_path: linux/arm64
+            jfrog_scripts_path: linux
+            installer_dir: installer/linux
+          - os: windows
+            arch: x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+            jfrog_path: windows/x86_64
+            jfrog_scripts_path: windows
+            installer_dir: installer/windows
+          - os: windows
+            arch: arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            jfrog_path: windows/arm64
+            jfrog_scripts_path: windows
+            installer_dir: installer/windows
+          - os: macos
+            arch: x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+            jfrog_path: macos/x86_64
+            jfrog_scripts_path: macos
+            installer_dir: installer/macos
+          - os: macos
+            arch: arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+            jfrog_path: macos/arm64
+            jfrog_scripts_path: macos
+            installer_dir: installer/macos
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install musl-tools
+        if: env.IS_MUSL_UBUNTU == 'true'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Install NSIS (Windows)
+        if: matrix.os == 'windows'
+        run: choco install -y nsis
+        shell: pwsh
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: clippy,rustfmt
+
+      - name: Cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Run cargo fmt
+        run: cargo fmt -- --check
+
+      - name: Run cargo clippy
+        run: cargo clippy --target=${{ matrix.target }} -- -D warnings
+
+      - name: Lint PowerShell installer scripts (PSScriptAnalyzer)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: ./installer/windows/Run-Lint.ps1
+
+      - name: Install cargo audit
+        run: |
+          if [ -x "$HOME/.cargo/bin/cargo-audit" ] || [ -x "$USERPROFILE\.cargo\bin\cargo-audit.exe" ]; then
+            echo "cargo-audit already installed."
+          else
+            cargo install cargo-audit --locked
+          fi
+        shell: bash
+
+      - name: Run cargo audit
+        run: cargo audit
+
+      - name: Build (release)
+        run: |
+          RUSTFLAGS="-C strip=symbols"
+          if [[ "${{ matrix.os }}" == "windows" ]]; then
+            RUSTFLAGS="$RUSTFLAGS -C target-feature=+crt-static"
+          fi
+          export RUSTFLAGS
+          cargo build --target=${{ matrix.target }} --release --locked
+        shell: bash
+
+      - name: Test (release)
+        run: cargo test --target=${{ matrix.target }} --release --locked
+
+      - name: Build agent installers with NSIS (Windows)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: |
+          # The .nsi files reference ..\..\target\release\openaev-agent.exe (the
+          # default unflavored release dir). Because we build with --target=...,
+          # the binary actually lives in target/<triple>/release/. Copy it to the
+          # legacy path so makensis can find it.
+          New-Item -ItemType Directory -Force -Path "./target/release" | Out-Null
+          Copy-Item -Force `
+            "./target/${{ matrix.target }}/release/openaev-agent.exe" `
+            "./target/release/openaev-agent.exe"
+
+          $installers = @(
+            "agent-installer.nsi",
+            "agent-installer-service-user.nsi",
+            "agent-installer-session-user.nsi"
+          )
+          foreach ($nsi in $installers) {
+            & "C:\Program Files (x86)\NSIS\Bin\makensis.exe" "./installer/windows/$nsi"
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "makensis failed for $nsi with exit code $LASTEXITCODE"
+              exit 1
+            }
+          }
+
+      - name: Install cargo cache
+        run: |
+          if [ -x "$HOME/.cargo/bin/cargo-cache" ] || [ -x "$USERPROFILE\.cargo\bin\cargo-cache.exe" ]; then
+            echo "cargo-cache already installed."
+          else
+            cargo install cargo-cache --locked
+          fi
+        shell: bash
+
+      - name: Run cargo cache
+        run: cargo cache -a -l || true
+        shell: bash
+
+      # ──────────────────────────────────────────────────────────────
+      # Stage artifacts for downstream promotion.
+      #
+      # Each matrix job uploads a flat directory layout matching the
+      # JFrog destination paths so the downstream workflow only needs
+      # to append the version suffix and PUT each file.
+      #
+      # Layout for the per-target artifact (agent-bin-<os>-<arch>):
+      #   <jfrog_path>/openaev-agent[.exe]               binary
+      #   <jfrog_path>/openaev-agent-installer.exe       (Windows only)
+      #   <jfrog_path>/openaev-agent-installer-service-user.exe
+      #   <jfrog_path>/openaev-agent-installer-session-user.exe
+      # ──────────────────────────────────────────────────────────────
+      - name: Stage binary + Windows installers for upload
+        shell: bash
+        run: |
+          set -euo pipefail
+          STAGE="staging/${{ matrix.jfrog_path }}"
+          mkdir -p "$STAGE"
+
+          if [[ "${{ matrix.os }}" == "windows" ]]; then
+            cp "./target/${{ matrix.target }}/release/openaev-agent.exe" \
+               "$STAGE/openaev-agent.exe"
+            for installer in agent-installer.exe \
+                             agent-installer-service-user.exe \
+                             agent-installer-session-user.exe; do
+              cp "./installer/windows/$installer" "$STAGE/openaev-$installer"
+            done
+          else
+            cp "./target/${{ matrix.target }}/release/openaev-agent" \
+               "$STAGE/openaev-agent"
+          fi
+
+          ls -la "$STAGE"
+
+      - name: Upload binary artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-bin-${{ matrix.os }}-${{ matrix.arch }}
+          path: staging/
+          if-no-files-found: error
+          retention-days: 14
+
+  # ──────────────────────────────────────────────────────────────────
+  # Code coverage (Linux only) — generates lcov.info via cargo-llvm-cov
+  # and uploads it to Codecov.
+  # ──────────────────────────────────────────────────────────────────
+  coverage:
+    name: "Coverage"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-coverage-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Generate coverage (lcov)
+        run: |
+          cargo llvm-cov --workspace --all-features --locked \
+            --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          flags: agent
+          disable_search: true
+          fail_ci_if_error: false
+
+  # ──────────────────────────────────────────────────────────────────
+  # OS-level installer / upgrade scripts (arch-independent).
+  # Uploaded once per OS so the downstream workflow does not need to
+  # deduplicate matrix outputs.
+  # ──────────────────────────────────────────────────────────────────
+  package-scripts:
+    name: "Package installer scripts"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Stage scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p staging/linux staging/macos staging/windows
+
+          # Linux / macOS shell scripts
+          for os in linux macos; do
+            for script in \
+              agent-installer.sh \
+              agent-upgrade.sh \
+              agent-installer-session-user.sh \
+              agent-upgrade-session-user.sh \
+              agent-installer-service-user.sh \
+              agent-upgrade-service-user.sh; do
+              cp "./installer/${os}/${script}" \
+                 "staging/${os}/openaev-${script%.sh}.sh"
+            done
+          done
+
+          # Windows PowerShell scripts
+          for script in \
+            agent-installer.ps1 \
+            agent-upgrade.ps1 \
+            agent-installer-session-user.ps1 \
+            agent-upgrade-session-user.ps1 \
+            agent-installer-service-user.ps1 \
+            agent-upgrade-service-user.ps1; do
+            cp "./installer/windows/${script}" \
+               "staging/windows/openaev-${script%.ps1}.ps1"
+          done
+
+          find staging -type f
+
+      - name: Upload scripts artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: agent-scripts
+          path: staging/
+          if-no-files-found: error
+          retention-days: 14
