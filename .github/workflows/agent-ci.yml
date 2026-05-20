@@ -17,12 +17,225 @@ permissions:
 
 jobs:
   # ──────────────────────────────────────────────────────────────────
-  # Build, lint, test the agent for every (os, arch) target.
-  # The same job runs identically for PRs, push to main, and tags —
-  # only the artifact names differ via the matrix.
+  # Quality gates (fmt + audit).
+  #
+  # Single-platform fast checks. Clippy lives in its own job because
+  # it needs to run per (os, arch) target to catch cfg-gated code.
+  # ──────────────────────────────────────────────────────────────────
+  quality:
+    name: "🔍 Quality gates (fmt + audit)"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+          key: cargo-quality-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Run cargo fmt
+        run: cargo fmt -- --check
+
+      - name: Install cargo audit
+        run: |
+          if [ -x "$HOME/.cargo/bin/cargo-audit" ]; then
+            echo "cargo-audit already installed."
+          else
+            cargo install cargo-audit --locked
+          fi
+
+      - name: Run cargo audit
+        run: cargo audit
+
+  # ──────────────────────────────────────────────────────────────────
+  # Clippy lint per-OS + PSScriptAnalyzer on Windows.
+  # Per-OS (not per-arch) is required because the agent has
+  # cfg(target_os=...) code paths the lint must validate on each
+  # platform. The cfg gates are arch-independent so one target per
+  # OS is sufficient.
+  # ──────────────────────────────────────────────────────────────────
+  clippy:
+    name: "🧹 Clippy (${{ matrix.os }})"
+    runs-on: ${{ matrix.runner }}
+    env:
+      IS_MUSL_UBUNTU: ${{ matrix.os == 'ubuntu' }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: windows
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: macos
+            runner: macos-latest
+            target: aarch64-apple-darwin
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install musl-tools
+        if: env.IS_MUSL_UBUNTU == 'true'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+          components: clippy
+
+      - name: Cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-clippy-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Run cargo clippy
+        run: cargo clippy --target=${{ matrix.target }} -- -D warnings
+
+      - name: Lint PowerShell installer scripts (PSScriptAnalyzer)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: ./installer/windows/Run-Lint.ps1
+
+  # ──────────────────────────────────────────────────────────────────
+  # Run the test suite on every (os, arch) target. This is the
+  # cross-platform correctness gate; `coverage` measures line coverage
+  # on Linux only.
+  # ──────────────────────────────────────────────────────────────────
+  tests:
+    name: "🧪 Tests (${{ matrix.os }}-${{ matrix.arch }})"
+    runs-on: ${{ matrix.runner }}
+    env:
+      IS_MUSL_UBUNTU: ${{ (matrix.os == 'ubuntu' && contains(matrix.target, 'musl')) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu
+            arch: x86_64
+            runner: ubuntu-latest
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-musl
+          - os: windows
+            arch: x86_64
+            runner: windows-latest
+            target: x86_64-pc-windows-msvc
+          - os: windows
+            arch: arm64
+            runner: windows-11-arm
+            target: aarch64-pc-windows-msvc
+          - os: macos
+            arch: x86_64
+            runner: macos-15-intel
+            target: x86_64-apple-darwin
+          - os: macos
+            arch: arm64
+            runner: macos-latest
+            target: aarch64-apple-darwin
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install musl-tools
+        if: env.IS_MUSL_UBUNTU == 'true'
+        run: sudo apt-get update && sudo apt-get install -y musl-tools
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-tests-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Run cargo test
+        run: cargo test --target=${{ matrix.target }} --locked
+
+  # ──────────────────────────────────────────────────────────────────
+  # Code coverage (Linux/x86_64 only). cargo-llvm-cov re-runs the
+  # test suite with LLVM source-based instrumentation to produce
+  # lcov.info, which is uploaded to Codecov. The `tests` job above
+  # is the cross-platform correctness gate; this job's role is
+  # coverage measurement.
+  # ──────────────────────────────────────────────────────────────────
+  coverage:
+    name: "📊 Coverage"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: llvm-tools-preview
+
+      - name: Cache
+        uses: actions/cache@v5
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: cargo-coverage-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+
+      - name: Install cargo-llvm-cov
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-llvm-cov
+
+      - name: Generate coverage (lcov)
+        run: |
+          cargo llvm-cov --workspace --all-features --locked \
+            --lcov --output-path lcov.info
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v6
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          files: lcov.info
+          flags: agent
+          disable_search: true
+          fail_ci_if_error: false
+
+  # ──────────────────────────────────────────────────────────────────
+  # Build + test the agent for every (os, arch) target, then stage
+  # artifacts for downstream promotion.
   # ──────────────────────────────────────────────────────────────────
   build:
-    name: "Build (${{ matrix.os }}-${{ matrix.arch }})"
+    name: "🔨 Build (${{ matrix.os }}-${{ matrix.arch }})"
     runs-on: ${{ matrix.runner }}
     env:
       IS_MUSL_UBUNTU: ${{ (matrix.os == 'ubuntu' && contains(matrix.target, 'musl')) }}
@@ -35,43 +248,31 @@ jobs:
             runner: ubuntu-latest
             target: x86_64-unknown-linux-musl
             jfrog_path: linux/x86_64
-            jfrog_scripts_path: linux
-            installer_dir: installer/linux
           - os: ubuntu
             arch: arm64
             runner: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
             jfrog_path: linux/arm64
-            jfrog_scripts_path: linux
-            installer_dir: installer/linux
           - os: windows
             arch: x86_64
             runner: windows-latest
             target: x86_64-pc-windows-msvc
             jfrog_path: windows/x86_64
-            jfrog_scripts_path: windows
-            installer_dir: installer/windows
           - os: windows
             arch: arm64
             runner: windows-11-arm
             target: aarch64-pc-windows-msvc
             jfrog_path: windows/arm64
-            jfrog_scripts_path: windows
-            installer_dir: installer/windows
           - os: macos
             arch: x86_64
             runner: macos-15-intel
             target: x86_64-apple-darwin
             jfrog_path: macos/x86_64
-            jfrog_scripts_path: macos
-            installer_dir: installer/macos
           - os: macos
             arch: arm64
             runner: macos-latest
             target: aarch64-apple-darwin
             jfrog_path: macos/arm64
-            jfrog_scripts_path: macos
-            installer_dir: installer/macos
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -89,7 +290,6 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
-          components: clippy,rustfmt
 
       - name: Cache
         uses: actions/cache@v5
@@ -100,30 +300,7 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             target/
-          key: cargo-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Run cargo fmt
-        run: cargo fmt -- --check
-
-      - name: Run cargo clippy
-        run: cargo clippy --target=${{ matrix.target }} -- -D warnings
-
-      - name: Lint PowerShell installer scripts (PSScriptAnalyzer)
-        if: matrix.os == 'windows'
-        shell: pwsh
-        run: ./installer/windows/Run-Lint.ps1
-
-      - name: Install cargo audit
-        run: |
-          if [ -x "$HOME/.cargo/bin/cargo-audit" ] || [ -x "$USERPROFILE\.cargo\bin\cargo-audit.exe" ]; then
-            echo "cargo-audit already installed."
-          else
-            cargo install cargo-audit --locked
-          fi
-        shell: bash
-
-      - name: Run cargo audit
-        run: cargo audit
+          key: cargo-build-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
 
       - name: Build (release)
         run: |
@@ -134,9 +311,6 @@ jobs:
           export RUSTFLAGS
           cargo build --target=${{ matrix.target }} --release --locked
         shell: bash
-
-      - name: Test (release)
-        run: cargo test --target=${{ matrix.target }} --release --locked
 
       - name: Build agent installers with NSIS (Windows)
         if: matrix.os == 'windows'
@@ -221,58 +395,12 @@ jobs:
           retention-days: 14
 
   # ──────────────────────────────────────────────────────────────────
-  # Code coverage (Linux only) — generates lcov.info via cargo-llvm-cov
-  # and uploads it to Codecov.
-  # ──────────────────────────────────────────────────────────────────
-  coverage:
-    name: "Coverage"
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: llvm-tools-preview
-
-      - name: Cache
-        uses: actions/cache@v5
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: cargo-coverage-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
-
-      - name: Generate coverage (lcov)
-        run: |
-          cargo llvm-cov --workspace --all-features --locked \
-            --lcov --output-path lcov.info
-
-      - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v6
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: lcov.info
-          flags: agent
-          disable_search: true
-          fail_ci_if_error: false
-
-  # ──────────────────────────────────────────────────────────────────
   # OS-level installer / upgrade scripts (arch-independent).
   # Uploaded once per OS so the downstream workflow does not need to
   # deduplicate matrix outputs.
   # ──────────────────────────────────────────────────────────────────
   package-scripts:
-    name: "Package installer scripts"
+    name: "📦 Package installer scripts"
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
