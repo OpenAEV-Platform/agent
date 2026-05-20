@@ -1,7 +1,7 @@
 name: "[OpenAEV] Auto Label"
 on:
   pull_request_target:
-    branches: [main, release/current]
+    branches: [main]
     types: [opened, reopened]
 permissions:
   contents: read
