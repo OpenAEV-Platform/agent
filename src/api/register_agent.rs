@@ -1,6 +1,6 @@
 use super::Client;
 use crate::common::error_model::Error;
-use log::error;
+use log::{error};
 use network_interface::NetworkInterface;
 use network_interface::NetworkInterfaceConfig;
 use serde::Deserialize;
@@ -82,9 +82,17 @@ impl Client {
                 && !ip.starts_with(IP_ADDRESS_FILTERED_2)
                 && !ip.starts_with(IP_ADDRESS_FILTERED_3)
         });
+
+        let asset_external_reference = mid::get("openaev").map_err(|e| {
+            // If we get a panic error in a thread, the thread is killed and not relaunched
+            // So if we don't get the external reference, we manage the error to execute the code again during the next ping
+            error!("Error generating external reference in register_agent: {}", e);
+            Error::Internal(e.to_string())
+        })?;
+
         let post_data = json!({
           "asset_name": hostname::get()?.to_string_lossy(),
-          "asset_external_reference": mid::get("openaev").unwrap(),
+          "asset_external_reference": asset_external_reference,
           "endpoint_agent_version": VERSION,
           "endpoint_ips": ip_addresses,
           "endpoint_platform": get_operating_system(),

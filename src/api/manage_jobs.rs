@@ -21,9 +21,16 @@ impl Client {
         executed_by_user: String,
         tenant_id: String,
     ) -> Result<Vec<JobResponse>, Error> {
+        let asset_external_reference = mid::get("openaev").map_err(|e| {
+            // If we get a panic error in a thread, the thread is killed and not relaunched
+            // So if we don't get the external reference, we manage the error to execute the code again during the next ping
+            error!("Error generating external reference in list_jobs: {}", e);
+            Error::Internal(e.to_string())
+        })?;
+
         // Post the input to the OpenAEV API
         let post_data = json!({
-          "asset_external_reference": mid::get("openaev").unwrap(),
+          "asset_external_reference": asset_external_reference,
           "agent_is_service": is_service,
           "agent_is_elevated": is_elevated,
           "agent_executed_by_user": executed_by_user

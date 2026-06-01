@@ -1,6 +1,6 @@
 use crate::config::settings::CleanupSettings;
 use crate::THREADS_CONTROL;
-use log::info;
+use log::{error, info};
 use std::fs::{DirEntry, File};
 use std::io::{Error, Write};
 use std::process::Command;
@@ -108,7 +108,14 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
                 kill_processes_for_directory(dirname);
                 // After kill, rename from execution to executed
                 info!("[cleanup thread] Renaming runtime directory {dirname}");
-                fs::rename(dirname, dirname.replace("execution", "executed")).unwrap();
+                if let Err(err) = fs::rename(dirname, dirname.replace("execution", "executed")) {
+                    // If we get a panic error in a thread, the thread is killed and not relaunched
+                    // So if we can't rename, we log the error and continue
+                    error!(
+                        "[cleanup thread] Failed to rename runtime directory {}: {}",
+                        dirname, err
+                    );
+                }
             }
             let rename_payloads_directories =
                 get_old_execution_directories("payloads", EXECUTION_PREFIX, executing_max_time)
@@ -117,7 +124,14 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
                 info!("[cleanup thread] Renaming payload directory {dirname}");
-                fs::rename(dirname, dirname.replace("execution", "executed")).unwrap();
+                if let Err(err) = fs::rename(dirname, dirname.replace("execution", "executed")) {
+                    // If we get a panic error in a thread, the thread is killed and not relaunched
+                    // So if we can't rename, we log the error and continue
+                    error!(
+                        "[cleanup thread] Failed to rename payload directory {}: {}",
+                        dirname, err
+                    );
+                }
             }
             // endregion
 
@@ -129,7 +143,14 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
                 info!("[cleanup thread] Removing runtime directory {dirname}");
-                fs::remove_dir_all(dir_path).unwrap()
+                if let Err(err) = fs::remove_dir_all(&dir_path) {
+                    // If we get a panic error in a thread, the thread is killed and not relaunched
+                    // So if we can't remove, we log the error and continue
+                    error!(
+                        "[cleanup thread] Failed to remove runtime directory {}: {}",
+                        dirname, err
+                    );
+                }
             }
             let remove_payloads_directories =
                 get_old_execution_directories("payloads", EXECUTED_PREFIX, directory_max_time)
@@ -138,7 +159,14 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
                 let dir_path = dir.path();
                 let dirname = dir_path.to_str().unwrap();
                 info!("[cleanup thread] Removing payload directory {dirname}");
-                fs::remove_dir_all(dir_path).unwrap()
+                if let Err(err) = fs::remove_dir_all(&dir_path) {
+                    // If we get a panic error in a thread, the thread is killed and not relaunched
+                    // So if we can't remove, we log the error and continue
+                    error!(
+                        "[cleanup thread] Failed to remove payload directory {}: {}",
+                        dirname, err
+                    );
+                }
             }
             // endregion
             // Wait for the next cleanup
