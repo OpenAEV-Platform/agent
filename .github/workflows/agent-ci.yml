@@ -345,7 +345,7 @@ jobs:
 
       - name: Install cargo cache
         run: |
-          if [ -x "$HOME/.cargo/bin/cargo-cache" ] || [ -x "$USERPROFILE\.cargo\bin\cargo-cache.exe" ]; then
+          if command -v cargo-cache &>/dev/null; then
             echo "cargo-cache already installed."
           else
             cargo install cargo-cache --locked
