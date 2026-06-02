@@ -34,8 +34,8 @@ fn get_old_execution_directories(
             let file_entry = entry.as_ref().unwrap();
             let file_name = file_entry.file_name();
             let metadata = fs::metadata(file_entry.path()).unwrap();
-            let file_name_str = file_name.to_str().unwrap();
-            if metadata.is_dir() && String::from(file_name_str).contains(path) {
+            let file_name_str = file_name.to_string_lossy();
+            if metadata.is_dir() && file_name_str.contains(path) {
                 let file_modified = metadata.modified().unwrap();
                 let old_minutes = now.duration_since(file_modified).unwrap().as_secs() / 60;
                 return old_minutes > since_minutes;
@@ -103,12 +103,12 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
                     .unwrap();
             for dir in kill_runtimes_directories {
                 let dir_path = dir.path();
-                let dirname = dir_path.to_str().unwrap();
+                let dirname = dir_path.to_string_lossy().into_owned();
                 info!("[cleanup thread] Killing process for runtime directory {dirname}");
-                kill_processes_for_directory(dirname);
+                kill_processes_for_directory(&dirname);
                 // After kill, rename from execution to executed
                 info!("[cleanup thread] Renaming runtime directory {dirname}");
-                if let Err(err) = fs::rename(dirname, dirname.replace("execution", "executed")) {
+                if let Err(err) = fs::rename(&dirname, dirname.replace("execution", "executed")) {
                     // If we get a panic error in a thread, the thread is killed and not relaunched
                     // So if we can't rename, we log the error and continue
                     error!(
@@ -122,9 +122,9 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
                     .unwrap();
             for dir in rename_payloads_directories {
                 let dir_path = dir.path();
-                let dirname = dir_path.to_str().unwrap();
+                let dirname = dir_path.to_string_lossy().into_owned();
                 info!("[cleanup thread] Renaming payload directory {dirname}");
-                if let Err(err) = fs::rename(dirname, dirname.replace("execution", "executed")) {
+                if let Err(err) = fs::rename(&dirname, dirname.replace("execution", "executed")) {
                     // If we get a panic error in a thread, the thread is killed and not relaunched
                     // So if we can't rename, we log the error and continue
                     error!(
@@ -141,7 +141,7 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
                     .unwrap();
             for dir in remove_runtimes_directories {
                 let dir_path = dir.path();
-                let dirname = dir_path.to_str().unwrap();
+                let dirname = dir_path.to_string_lossy().into_owned();
                 info!("[cleanup thread] Removing runtime directory {dirname}");
                 if let Err(err) = fs::remove_dir_all(&dir_path) {
                     // If we get a panic error in a thread, the thread is killed and not relaunched
@@ -157,7 +157,7 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
                     .unwrap();
             for dir in remove_payloads_directories {
                 let dir_path = dir.path();
-                let dirname = dir_path.to_str().unwrap();
+                let dirname = dir_path.to_string_lossy().into_owned();
                 info!("[cleanup thread] Removing payload directory {dirname}");
                 if let Err(err) = fs::remove_dir_all(&dir_path) {
                     // If we get a panic error in a thread, the thread is killed and not relaunched
@@ -175,3 +175,4 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
     });
     Ok(handle)
 }
+
