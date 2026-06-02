@@ -175,4 +175,3 @@ pub fn clean(cleanup: CleanupSettings) -> Result<JoinHandle<()>, Error> {
     });
     Ok(handle)
 }
-
