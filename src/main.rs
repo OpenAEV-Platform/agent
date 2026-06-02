@@ -23,6 +23,7 @@ use crate::config::settings::Settings;
 use crate::process::agent_job;
 use crate::process::{agent_cleanup, keep_alive};
 use crate::windows::service::service_stub;
+use tracing_subscriber::filter::LevelFilter;
 
 pub static THREADS_CONTROL: AtomicBool = AtomicBool::new(true);
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -109,6 +110,7 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
 
 fn main() -> Result<(), Error> {
     set_error_hook();
+    let settings_data = Settings::new().map_err(|e| Error::Internal(e.to_string()))?;
     // region Init logger
     let current_exe_patch = env::current_exe().unwrap();
     let parent_path = current_exe_patch.parent().unwrap();
@@ -116,15 +118,22 @@ fn main() -> Result<(), Error> {
     let condition = RollingConditionBasic::new().daily();
     let file_appender = BasicRollingFileAppender::new(log_file, condition, 3).unwrap();
     let (file_writer, _guard) = tracing_appender::non_blocking(file_appender);
+
+    let max_level = if settings_data.debug {
+        LevelFilter::DEBUG
+    } else {
+        LevelFilter::INFO
+    };
+
     tracing_subscriber::fmt()
         .json()
+        .with_max_level(max_level)
         .with_writer(file_writer)
         .init();
     // endregion
+
     // region Process execution
     info!("Starting OpenAEV agent {} ({})", VERSION, Settings::mode());
-    let settings = Settings::new();
-    let settings_data = settings.unwrap();
     if service_stub::is_windows_service() {
         // Running as a Windows service
         agent_start(settings_data, true).unwrap();
