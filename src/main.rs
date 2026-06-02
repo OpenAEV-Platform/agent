@@ -110,8 +110,7 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
 
 fn main() -> Result<(), Error> {
     set_error_hook();
-    let settings = Settings::new();
-    let settings_data = settings.unwrap();
+    let settings_data = Settings::new().map_err(|e| Error::Internal(e.to_string()))?;
     // region Init logger
     let current_exe_patch = env::current_exe().unwrap();
     let parent_path = current_exe_patch.parent().unwrap();
@@ -123,7 +122,7 @@ fn main() -> Result<(), Error> {
     let max_level = if settings_data.debug {
         LevelFilter::DEBUG
     } else {
-        LevelFilter::ERROR
+        LevelFilter::INFO
     };
 
     tracing_subscriber::fmt()
