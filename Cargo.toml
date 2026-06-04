@@ -1,6 +1,6 @@
 [package]
 name = "openaev-agent"
-version = "2.260603.1"
+version = "2.260604.0"
 edition = "2021"
 
 [dependencies]
