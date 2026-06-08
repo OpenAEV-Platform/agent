@@ -51,9 +51,15 @@ architecture=$(uname -m)
 user="$USER_ARG"
 group="$GROUP_ARG"
 
+home_dir="$(getent passwd "${user}" | cut -d: -f6 || true)"
+if [ -z "${home_dir}" ]; then
+  echo "Error: unable to resolve home directory for user '${user}' via getent passwd."
+  exit 1
+fi
+
 os=$(uname | tr '[:upper:]' '[:lower:]')
 systemd_status=$(systemctl is-system-running)
-install_dir="$HOME/${OPENAEV_INSTALL_DIR}-${user}"
+install_dir="${home_dir}/${OPENAEV_INSTALL_DIR}-${user}"
 service_name="${user}-${OPENAEV_SERVICE_NAME}"
 tenant_id="${OPENAEV_TENANT_ID}"
 
