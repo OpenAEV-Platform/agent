@@ -57,24 +57,24 @@ jobs:
       - run: cargo build --release
       - run: cargo test --release
       - run:
-         name: Build agent installers with NSIS
-         shell: powershell.exe
-         command: |
-           & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer.nsi
-           if ($LASTEXITCODE -ne 0) {
-             Write-Host "makensis failed with exit code $LASTEXITCODE"
-             exit 1
-           }
-           & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer-service-user.nsi
-           if ($LASTEXITCODE -ne 0) {
-             Write-Host "makensis failed with exit code $LASTEXITCODE"
-             exit 1
-           }
-           & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer-session-user.nsi
-           if ($LASTEXITCODE -ne 0) {
-             Write-Host "makensis failed with exit code $LASTEXITCODE"
-             exit 1
-           }
+          name: Build agent installers with NSIS
+          shell: powershell.exe
+          command: |
+            & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer.nsi
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "makensis failed with exit code $LASTEXITCODE"
+              exit 1
+            }
+            & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer-service-user.nsi
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "makensis failed with exit code $LASTEXITCODE"
+              exit 1
+            }
+            & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer-session-user.nsi
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "makensis failed with exit code $LASTEXITCODE"
+              exit 1
+            }
       - run:
           name: push to jfrog
           command: |
@@ -99,7 +99,7 @@ jobs:
   windows_arm_64_compile:
     machine: true
     resource_class: openbas-platform/openbas-agent-windows-64bits-arm
-    shell: 'powershell.exe -ExecutionPolicy Bypass'
+    shell: "powershell.exe -ExecutionPolicy Bypass"
     steps:
       - checkout
       - restore_cache:
@@ -135,7 +135,7 @@ jobs:
   windows_arm_64_build:
     machine: true
     resource_class: openbas-platform/openbas-agent-windows-64bits-arm
-    shell: 'powershell.exe -ExecutionPolicy Bypass'
+    shell: "powershell.exe -ExecutionPolicy Bypass"
     steps:
       - checkout
       - restore_cache:
@@ -152,24 +152,24 @@ jobs:
       - run: $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH; Invoke-Expression '& "$env:USERPROFILE\.cargo\bin\cargo" build --release'
       - run: $env:PATH = "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Tools\Llvm\ARM64\bin;" + $env:PATH; Invoke-Expression '& "$env:USERPROFILE\.cargo\bin\cargo" test --release'
       - run:
-         name: Build agent installers with NSIS
-         shell: powershell.exe
-         command: |
-           & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer.nsi
-           if ($LASTEXITCODE -ne 0) {
-             Write-Host "makensis failed with exit code $LASTEXITCODE"
-             exit 1
-           }
-           & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer-service-user.nsi
-           if ($LASTEXITCODE -ne 0) {
-             Write-Host "makensis failed with exit code $LASTEXITCODE"
-             exit 1
-           }
-           & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer-session-user.nsi
-           if ($LASTEXITCODE -ne 0) {
-             Write-Host "makensis failed with exit code $LASTEXITCODE"
-             exit 1
-           }
+          name: Build agent installers with NSIS
+          shell: powershell.exe
+          command: |
+            & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer.nsi
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "makensis failed with exit code $LASTEXITCODE"
+              exit 1
+            }
+            & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer-service-user.nsi
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "makensis failed with exit code $LASTEXITCODE"
+              exit 1
+            }
+            & "C:\Program Files (x86)\NSIS\Bin\makensis" ./installer/windows/agent-installer-session-user.nsi
+            if ($LASTEXITCODE -ne 0) {
+              Write-Host "makensis failed with exit code $LASTEXITCODE"
+              exit 1
+            }
       - run:
           name: push to jfrog
           command: |
