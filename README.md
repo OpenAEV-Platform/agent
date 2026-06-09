@@ -1,7 +1,6 @@
 # OpenAEV Agent
 
 [![Website](https://img.shields.io/badge/website-openaev.io-blue.svg)](https://openaev.io)
-[![CircleCI](https://circleci.com/gh/OpenAEV-Platform/agent.svg?style=shield)](https://circleci.com/gh/OpenAEV-Platform/agent/tree/main)
 [![GitHub release](https://img.shields.io/github/release/OpenAEV-Platform/agent.svg)](https://github.com/OpenAEV-Platform/agent/releases/latest)
 [![Slack Status](https://img.shields.io/badge/slack-3K%2B%20members-4A154B)](https://community.filigran.io)
 
