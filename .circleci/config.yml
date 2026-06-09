@@ -1,5 +1,10 @@
 version: 2.1
 
+parameters:
+  run_workflow:
+    type: boolean
+    default: false
+
 orbs:
   win: circleci/windows@5.1.1
   macos: circleci/macos@2.5.4
@@ -419,6 +424,7 @@ jobs:
             - ~/.cargo
 workflows:
   openaev-agent:
+    when: << pipeline.parameters.run_workflow >>
     jobs:
       - windows_x86_64_compile:
           filters:
