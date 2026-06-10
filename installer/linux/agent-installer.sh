@@ -3,7 +3,7 @@ set -e
 
 base_url=${OPENAEV_URL}
 architecture=$(uname -m)
-systemd_status=$(systemctl is-system-running)
+systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
 install_dir="${OPENAEV_INSTALL_DIR}"
@@ -17,6 +17,7 @@ fi
 
 if [ "$systemd_status" != "running" ] && [ "$systemd_status" != "degraded" ]; then
   echo "Systemd is in unexpected state: $systemd_status. Installation is not supported."
+  echo "Prerequisite: an active systemd system manager is required for service mode."
   exit 1
 else
   echo "Systemd is in acceptable state: $systemd_status"

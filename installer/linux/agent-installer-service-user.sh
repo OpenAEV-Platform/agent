@@ -58,7 +58,7 @@ if [ -z "${home_dir}" ]; then
 fi
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
-systemd_status=$(systemctl is-system-running)
+systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 install_dir="${home_dir}/${OPENAEV_INSTALL_DIR}-${user}"
 service_name="${user}-${OPENAEV_SERVICE_NAME}"
 tenant_id="${OPENAEV_TENANT_ID}"
@@ -71,6 +71,7 @@ fi
 
 if [ "$systemd_status" != "running" ] && [ "$systemd_status" != "degraded" ]; then
   echo "Systemd is in unexpected state: $systemd_status. Installation is not supported."
+  echo "Prerequisite: an active systemd system manager is required for service-user mode."
   exit 1
 else
   echo "Systemd is in acceptable state: $systemd_status"
