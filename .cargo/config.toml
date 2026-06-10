@@ -2,3 +2,15 @@
 lint = "clippy -- -D warnings"
 fmtfix = "fmt"
 fmtcheck = "fmt -- --check"
+
+# Force static CRT linkage on all Windows MSVC targets.
+# This embeds the Visual C++ runtime into the binary so it runs on
+# machines without the VC++ Redistributable installed.
+#
+# NOTE: Do NOT set RUSTFLAGS in CI — it would override these
+# target-specific rustflags and silently drop +crt-static.
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
+
+[target.aarch64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]
