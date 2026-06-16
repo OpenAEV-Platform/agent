@@ -7,7 +7,7 @@ parameters:
 
 orbs:
   win: circleci/windows@5.1.1
-  macos: circleci/macos@2.5.4
+  macos: circleci/macos@3.0.0
 
 jobs:
   windows_x86_64_compile:
