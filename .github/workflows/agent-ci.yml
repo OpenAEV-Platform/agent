@@ -309,13 +309,32 @@ jobs:
 
       - name: Build (release)
         run: |
-          RUSTFLAGS="-C strip=symbols"
-          if [[ "${{ matrix.os }}" == "windows" ]]; then
-            RUSTFLAGS="$RUSTFLAGS -C target-feature=+crt-static"
-          fi
-          export RUSTFLAGS
+          # Static CRT linkage for Windows is configured in .cargo/config.toml
+          # (target-feature=+crt-static) so VCRUNTIME140.dll is not required at
+          # runtime.
+          #
+          # IMPORTANT: We must NOT set RUSTFLAGS here because it would *override*
+          # (not combine with) the target-specific rustflags in .cargo/config.toml,
+          # effectively dropping +crt-static.  This was the root cause of the
+          # VCRUNTIME140.dll missing error on Windows ARM64.
           cargo build --target=${{ matrix.target }} --release --locked
         shell: bash
+
+      - name: Verify no dynamic CRT dependency (Windows)
+        if: matrix.os == 'windows'
+        shell: bash
+        run: |
+          BIN="./target/${{ matrix.target }}/release/openaev-agent.exe"
+          echo "Checking $BIN for VCRUNTIME imports…"
+          # rustup includes llvm-objdump; use it instead of dumpbin which
+          # may not be on PATH (especially on windows-11-arm runners).
+          if rustup run stable llvm-objdump --private-headers "$BIN" \
+             | grep -qi "vcruntime"; then
+            echo "::error::Binary still dynamically links to VCRUNTIME:"
+            rustup run stable llvm-objdump --private-headers "$BIN" | grep -i "vcruntime"
+            exit 1
+          fi
+          echo "✅ No VCRUNTIME dependency found — static CRT linkage confirmed."
 
       - name: Build agent installers with NSIS (Windows)
         if: matrix.os == 'windows'
