@@ -1,6 +1,12 @@
 #!/bin/sh
 set -e
 
+log() { printf '%s\n' "$*" >&2; }
+die() { log "[ERROR] $*"; exit 1; }
+run() {
+  "$@" || die "$*"
+}
+
 # --- Parse command-line arguments ---
 USER_ARG=""
 GROUP_ARG=""
@@ -25,25 +31,21 @@ done
 
 # --- Validate that user and group are provided ---
 if [ -z "$USER_ARG" ]; then
-  echo "Error: --user argument is required and cannot be empty."
-  exit 1
+  die "Error: --user argument is required and cannot be empty."
 fi
 
 if [ -z "$GROUP_ARG" ]; then
-  echo "Error: --group argument is required and cannot be empty. You can find your groups with the command 'id'."
-  exit 1
+  die "Error: --group argument is required and cannot be empty. You can find your groups with the command 'id'."
 fi
 
 # --- Verify that the user exists ---
 if ! id "$USER_ARG" >/dev/null 2>&1; then
-  echo "Error: User '$USER_ARG' does not exist."
-  exit 1
+  die "Error: User '$USER_ARG' does not exist."
 fi
 
 # --- Verify that the group exists ---
 if ! getent group "$GROUP_ARG" >/dev/null 2>&1; then
-  echo "Error: Group '$GROUP_ARG' does not exist. You can find your groups with the command 'id'."
-  exit 1
+  die "Error: Group '$GROUP_ARG' does not exist. You can find your groups with the command 'id'."
 fi
 
 base_url=${OPENAEV_URL}
@@ -53,41 +55,39 @@ group="$GROUP_ARG"
 
 home_dir="$(getent passwd "${user}" | cut -d: -f6 || true)"
 if [ -z "${home_dir}" ]; then
-  echo "Error: unable to resolve home directory for user '${user}' via getent passwd."
-  exit 1
+  die "Error: unable to resolve home directory for user '${user}' via getent passwd."
 fi
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
-systemd_status=$(systemctl is-system-running)
+systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 install_dir="${home_dir}/${OPENAEV_INSTALL_DIR}-${user}"
 service_name="${user}-${OPENAEV_SERVICE_NAME}"
 tenant_id="${OPENAEV_TENANT_ID}"
 
 
 if [ "${os}" != "linux" ]; then
-  echo "Operating system $OSTYPE is not supported yet, please create a ticket in openaev github project"
-  exit 1
+  die "Operating system $OSTYPE is not supported yet, please create a ticket in openaev github project"
 fi
 
 if [ "$systemd_status" != "running" ] && [ "$systemd_status" != "degraded" ]; then
-  echo "Systemd is in unexpected state: $systemd_status. Installation is not supported."
-  exit 1
+  die "Systemd is in unexpected state: $systemd_status. Installation is not supported."
 else
-  echo "Systemd is in acceptable state: $systemd_status"
+  log "Systemd is in acceptable state: $systemd_status"
 fi
 
-echo "Starting install script for ${os} | ${architecture}"
+log "Starting install script for ${os} | ${architecture}"
 
-echo "01. Stopping existing ${service_name}..."
-systemctl stop ${service_name} || echo "Fail stopping ${service_name}"
+log "01. Stopping existing ${service_name}..."
+systemctl stop ${service_name} || log "Fail stopping ${service_name}"
 
-echo "02. Downloading OpenAEV Agent into ${install_dir}..."
-(mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
-curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
-chmod +x ${install_dir}/openaev-agent
+log "02. Downloading OpenAEV Agent into ${install_dir}..."
+run mkdir -p "${install_dir}"
+[ -w "${install_dir}" ] || die "Can't write to ${install_dir}"
+run curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+run chmod +x ${install_dir}/openaev-agent
 
-echo "03. Creating OpenAEV configuration file"
-cat > ${install_dir}/openaev-agent-config.toml <<EOF
+log "03. Creating OpenAEV configuration file"
+cat > ${install_dir}/openaev-agent-config.toml <<EOF || die "Unable to write ${install_dir}/openaev-agent-config.toml"
 debug=false
 
 [openaev]
@@ -100,8 +100,8 @@ service_name = "${OPENAEV_SERVICE_NAME}"
 tenant_id = "${OPENAEV_TENANT_ID}"
 EOF
 
-echo "04. Writing agent service"
-cat > ${install_dir}/${service_name}.service <<EOF
+log "04. Writing agent service"
+cat > ${install_dir}/${service_name}.service <<EOF || die "Unable to write ${install_dir}/${session_name}.service"
 [Unit]
 Description=OpenAEV Agent Service ${user}
 After=network.target
@@ -117,13 +117,11 @@ RestartSec=60
 WantedBy=multi-user.target
 EOF
 
-chown -R ${user}:${group} ${install_dir}
-echo "05. Starting agent service"
-(
-  ln -sf ${install_dir}/${service_name}.service /etc/systemd/system/
-  systemctl daemon-reload
-  systemctl enable ${service_name}
-  systemctl start ${service_name}
-) || (echo "Error while enabling OpenAEV Agent systemd unit file or starting the agent" >&2 && exit 1)
+run chown -R ${user}:${group} ${install_dir}
+log "05. Starting agent service"
+run ln -sf ${install_dir}/${service_name}.service /etc/systemd/system/
+run systemctl daemon-reload
+run systemctl enable ${service_name}
+run systemctl start ${service_name}
 
-echo "OpenAEV Agent started."
+log "OpenAEV Agent started."

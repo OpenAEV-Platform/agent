@@ -1,9 +1,15 @@
 #!/bin/sh
 set -e
 
+log() { printf '%s\n' "$*" >&2; }
+die() { log "[ERROR] $*"; exit 1; }
+run() {
+  "$@" || die "$*"
+}
+
 base_url=${OPENAEV_URL}
-architecture=$(uname -m)
-systemd_status=$(systemctl is-system-running)
+architecture=$(run uname -m)
+systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
 session_name="${OPENAEV_SERVICE_NAME}"
@@ -22,31 +28,29 @@ case "${OPENAEV_INSTALL_DIR}" in
 esac
 
 if [ "${os}" != "linux" ]; then
-  echo "Operating system $OSTYPE is not supported yet, please create a ticket in openaev github project"
-  exit 1
+  die "Operating system $OSTYPE is not supported yet, please create a ticket in openaev github project"
 fi
 
 if [ "$systemd_status" != "running" ] && [ "$systemd_status" != "degraded" ]; then
-  echo "Systemd is in unexpected state: $systemd_status. Installation is not supported."
-  exit 1
+  die "Systemd is in unexpected state: $systemd_status. Installation is not supported."
 else
-  echo "Systemd is in acceptable state: $systemd_status"
+  log "Systemd is in acceptable state: $systemd_status"
 fi
 
-echo "Starting upgrade script for ${os} | ${architecture}"
+log "Starting upgrade script for ${os} | ${architecture}"
 
 # Manage the renaming OpenBAS -> OpenAEV ...
 openaev_dir=$(printf %s "${install_dir}" | sed 's/openbas/openaev/g')
 if [ -d "$openaev_dir" ]; then
 # Upgrade the agent if the folder *openaev* exists
 
-echo "01. Downloading OpenAEV Agent into ${install_dir}..."
-curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+log "01. Downloading OpenAEV Agent into ${install_dir}..."
+run curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
 mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
-chmod +x ${install_dir}/openaev-agent
+run chmod +x ${install_dir}/openaev-agent
 
-echo "02. Updating OpenAEV configuration file"
-cat > ${install_dir}/openaev-agent-config.toml <<EOF
+log "02. Updating OpenAEV configuration file"
+cat > ${install_dir}/openaev-agent-config.toml <<EOF || die "Unable to write ${install_dir}/openaev-agent-config.toml"
 debug=false
 
 [openaev]
@@ -59,25 +63,23 @@ service_name = "${OPENAEV_SERVICE_NAME}"
 tenant_id = "${OPENAEV_TENANT_ID}"
 EOF
 
-echo "03. Restarting the service"
-systemctl --user restart ${session_name} || (echo "Fail restarting ${session_name}" >&2 && exit 1)
+log "03. Restarting the service"
+run systemctl --user restart ${session_name}
 
 else
 # Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
-echo "01. Installing OpenAEV Agent..."
+log "01. Installing OpenAEV Agent..."
 openaev_session=$(printf %s "${session_name}" | sed 's/openbas/openaev/g')
-curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" | sh
+run curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" | sh
 
-echo "02. Uninstalling OpenBAS Agent..."
-(
+log "02. Uninstalling OpenBAS Agent..."
 uninstall_dir=$(printf %s "${install_dir}" | sed 's/openaev/openbas/g')
 uninstall_session=$(printf %s "${session_name}" | sed 's/openaev/openbas/g')
-rm -f ${uninstall_dir}/openbas_agent_kill.sh
-rm -f ${uninstall_dir}/openbas-agent-config.toml
-rm -f ${uninstall_dir}/openbas-agent
-systemctl --user disable ${uninstall_session} --now
-) || (echo "Error while uninstalling OpenBAS Agent" >&2 && exit 1)
+run rm -f ${uninstall_dir}/openbas_agent_kill.sh
+run rm -f ${uninstall_dir}/openbas-agent-config.toml
+run rm -f ${uninstall_dir}/openbas-agent
+run systemctl --user disable ${uninstall_session} --now
 fi
 # ... Manage the renaming OpenBAS -> OpenAEV
 
-echo "OpenAEV Agent Session User started."
+log "OpenAEV Agent Session User started."

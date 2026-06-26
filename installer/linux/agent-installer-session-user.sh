@@ -1,9 +1,15 @@
 #!/bin/sh
 set -e
 
+log() { printf '%s\n' "$*" >&2; }
+die() { log "[ERROR] $*"; exit 1; }
+run() {
+  "$@" || die "$*"
+}
+
 base_url=${OPENAEV_URL}
-architecture=$(uname -m)
-systemd_status=$(systemctl is-system-running)
+architecture=$(run uname -m)
+systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
 install_dir="$HOME/${OPENAEV_INSTALL_DIR}"
@@ -12,30 +18,28 @@ systemd_unit_dir="$HOME/.config/systemd/user/"
 tenant_id="${OPENAEV_TENANT_ID}"
 
 if [ "${os}" != "linux" ]; then
-  echo "Operating system $OSTYPE is not supported yet, please create a ticket in openaev github project"
-  exit 1
+  die "Operating system $OSTYPE is not supported yet, please create a ticket in openaev github project"
 fi
-
 
 if [ "$systemd_status" != "running" ] && [ "$systemd_status" != "degraded" ]; then
-  echo "Systemd is in unexpected state: $systemd_status. Installation is not supported."
-  exit 1
+  die "Systemd is in unexpected state: $systemd_status. Installation is not supported."
 else
-  echo "Systemd is in acceptable state: $systemd_status"
+  log "Systemd is in acceptable state: $systemd_status"
 fi
 
-echo "Starting install script for ${os} | ${architecture}"
+log "Starting install script for ${os} | ${architecture}"
 
-echo "01. Stopping existing ${session_name}..."
-systemctl --user stop ${session_name} || echo "Fail stopping ${session_name}"
+log "01. Stopping existing ${session_name}..."
+systemctl --user stop ${session_name} || log "Fail stopping ${session_name}"
 
-echo "02. Downloading OpenAEV Agent into ${install_dir}..."
-(mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
-curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
-chmod +x ${install_dir}/openaev-agent
+log "02. Downloading OpenAEV Agent into ${install_dir}..."
+run mkdir -p "${install_dir}"
+[ -w "${install_dir}" ] || die "Can't write to ${install_dir}"
+run curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+run chmod +x ${install_dir}/openaev-agent
 
-echo "03. Creating OpenAEV configuration file"
-cat > ${install_dir}/openaev-agent-config.toml <<EOF
+log "03. Creating OpenAEV configuration file"
+cat > ${install_dir}/openaev-agent-config.toml <<EOF || die "Unable to write ${install_dir}/openaev-agent-config.toml"
 debug=false
 
 [openaev]
@@ -48,8 +52,8 @@ service_name = "${OPENAEV_SERVICE_NAME}"
 tenant_id = "${OPENAEV_TENANT_ID}"
 EOF
 
-echo "04. Writing agent service"
-cat > ${install_dir}/${session_name}.service <<EOF
+log "04. Writing agent service"
+cat > ${install_dir}/${session_name}.service <<EOF || die "Unable to write ${install_dir}/${session_name}.service"
 [Unit]
 Description=OpenAEV Agent Session
 After=network.target
@@ -61,13 +65,11 @@ StandardOutput=journal
 WantedBy=default.target
 EOF
 
-echo "05. Starting agent service"
-(
-  mkdir -p $systemd_unit_dir
-  ln -sf ${install_dir}/${session_name}.service $systemd_unit_dir
-  systemctl --user daemon-reload
-  systemctl --user enable ${session_name}
-  systemctl --user start ${session_name}
-) || (echo "Error while enabling OpenAEV Agent systemd unit file or starting the agent" >&2 && exit 1)
+log "05. Starting agent service"
+run mkdir -p $systemd_unit_dir
+run ln -sf ${install_dir}/${session_name}.service $systemd_unit_dir
+run systemctl --user daemon-reload
+run systemctl --user enable ${session_name}
+run systemctl --user start ${session_name}
 
-echo "OpenAEV Agent started."
+log "OpenAEV Agent started."
