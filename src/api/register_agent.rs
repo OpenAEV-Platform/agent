@@ -96,6 +96,7 @@ impl Client {
         let post_data = json!({
           "asset_name": hostname::get()?.to_string_lossy(),
           "asset_external_reference": asset_external_reference,
+          "asset_category": "HOST",
           "endpoint_agent_version": VERSION,
           "endpoint_ips": ip_addresses,
           "endpoint_platform": get_operating_system(),
