@@ -3,7 +3,7 @@ set -e
 
 base_url=${OPENAEV_URL}
 architecture=$(uname -m)
-systemd_status=$(systemctl is-system-running)
+systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
 install_dir="$HOME/${OPENAEV_INSTALL_DIR}"
@@ -22,6 +22,12 @@ if [ "$systemd_status" != "running" ] && [ "$systemd_status" != "degraded" ]; th
   exit 1
 else
   echo "Systemd is in acceptable state: $systemd_status"
+fi
+
+if ! systemctl --user show-environment >/dev/null 2>&1; then
+  echo "Error: systemd user manager is not available in this session."
+  echo "Prerequisite: an active systemd user manager is required for session-user mode."
+  exit 1
 fi
 
 echo "Starting install script for ${os} | ${architecture}"
