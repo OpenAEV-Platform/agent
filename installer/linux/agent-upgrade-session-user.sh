@@ -70,7 +70,10 @@ else
 # Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
 log "01. Installing OpenAEV Agent..."
 openaev_session=$(printf %s "${session_name}" | sed 's/openbas/openaev/g')
-run curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" | sh
+tmp_installer="$(mktemp)" || die "mktemp failed"
+run curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" -o "$tmp_installer"
+run sh "$tmp_installer"
+rm -f "$tmp_installer"
 
 log "02. Uninstalling OpenBAS Agent..."
 uninstall_dir=$(printf %s "${install_dir}" | sed 's/openaev/openbas/g')

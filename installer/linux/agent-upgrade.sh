@@ -60,11 +60,14 @@ else
 # Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
 log "01. Installing OpenAEV Agent..."
 openaev_service=$(printf %s "${service_name}" | sed 's/openbas/openaev/g')
-run curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/service/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_service}" | sh
+tmp_installer="$(mktemp)" || die "mktemp failed"
+run curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/service/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_service}" -o "$tmp_installer"
+run sh "$tmp_installer"
+rm -f "$tmp_installer"
 
 log "02. Uninstalling OpenBAS Agent..."
-run uninstall_dir=$(printf %s "${install_dir}" | sed 's/openaev/openbas/g')
-run uninstall_service=$(printf %s "${service_name}" | sed 's/openaev/openbas/g')
+uninstall_dir=$(printf %s "${install_dir}" | sed 's/openaev/openbas/g')
+uninstall_service=$(printf %s "${service_name}" | sed 's/openaev/openbas/g')
 run rm -f ${uninstall_dir}/openbas_agent_kill.sh
 run rm -f ${uninstall_dir}/openbas-agent-config.toml
 run rm -f ${uninstall_dir}/openbas-agent
