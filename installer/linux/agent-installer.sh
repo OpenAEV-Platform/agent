@@ -52,7 +52,7 @@ tenant_id = "${OPENAEV_TENANT_ID}"
 EOF
 
 log "04. Writing agent service"
-cat > ${install_dir}/${service_name}.service <<EOF || die "Unable to write ${install_dir}/${session_name}.service"
+cat > ${install_dir}/${service_name}.service <<EOF || die "Unable to write ${install_dir}/${service_name}.service"
 [Unit]
 Description=OpenAEV Agent
 After=network.target
