@@ -419,6 +419,55 @@ jobs:
           retention-days: 14
 
   # ──────────────────────────────────────────────────────────────────
+  # Agent & Implant smoke tests (PR-level, latest runners only).
+  #
+  # Downloads released binaries from JFrog, starts them with a fake
+  # config pointing at localhost:1, and asserts they produce a
+  # connection error (proving startup + network-layer reach).
+  # ──────────────────────────────────────────────────────────────────
+  agent-implant-smoke-tests:
+    name: "💨 Smoke (${{ matrix.os }}-${{ matrix.arch }})"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: linux
+            arch: x86_64
+            runner: ubuntu-latest
+            jfrog-arch: x86_64
+          - os: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            jfrog-arch: arm64
+          - os: windows
+            arch: x86_64
+            runner: windows-latest
+            jfrog-arch: x86_64
+          - os: windows
+            arch: arm64
+            runner: windows-11-arm
+            jfrog-arch: arm64
+          - os: macos
+            arch: x86_64
+            runner: macos-15-intel
+            jfrog-arch: x86_64
+          - os: macos
+            arch: arm64
+            runner: macos-latest
+            jfrog-arch: arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Run agent & implant smoke tests
+        uses: ./.github/actions/agent-implant-smoke
+        with:
+          os: ${{ matrix.os }}
+          jfrog-arch: ${{ matrix.jfrog-arch }}
+
+  # ──────────────────────────────────────────────────────────────────
   # OS-level installer / upgrade scripts (arch-independent).
   # Uploaded once per OS so the downstream workflow does not need to
   # deduplicate matrix outputs.
