@@ -1,22 +1,48 @@
 [package]
 name = "openaev-agent"
-version = "2.260702.0"
+version = "2.260703.0"
 edition = "2021"
 
 [dependencies]
-reqwest = { version = "0.12.15", features = ["blocking", "rustls-tls", "rustls-tls-native-roots", "json"], default-features = false }
 config = "0.15.0"
-serde = { version = "1.0.203", features = ["derive"] }
-serde_json = {version = "1.0.140"}
-log = { version = "0.4.22", features = ["kv"] }
 hostname = "0.4.0"
 network-interface = "2.0.3"
 mid = "=3.0.7"
-tracing-subscriber = { version = "0.3.18", features = ["json"] }
 tracing-appender = "0.2.3"
 rolling-file = "0.2.0"
 
-[target.'cfg(windows)'.dependencies]
+[dependencies.reqwest]
+version = "0.12.15"
+features = [
+    "blocking",
+    "rustls-tls",
+    "rustls-tls-native-roots",
+    "json",
+]
+default-features = false
+
+[dependencies.serde]
+version = "1.0.203"
+features = [
+    "derive",
+]
+
+[dependencies.serde_json]
+version = "1.0.140"
+
+[dependencies.log]
+version = "0.4.22"
+features = [
+    "kv",
+]
+
+[dependencies.tracing-subscriber]
+version = "0.3.18"
+features = [
+    "json",
+]
+
+[target."cfg(windows)".dependencies]
 windows-service = "0.8.0"
 windows-service-detector = "0.1.0"
 
