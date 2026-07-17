@@ -93,16 +93,20 @@ impl Client {
             Error::Internal(e.to_string())
         })?;
 
+        let hostname = hostname::get()?.to_string_lossy().into_owned();
+
+        // Network fields moved from the endpoint to the asset level in the asset taxonomy
+        // remodel; platform / arch / agent_version stay endpoint-scoped (agent-capable hosts).
         let post_data = json!({
-          "asset_name": hostname::get()?.to_string_lossy(),
+          "asset_name": hostname,
           "asset_external_reference": asset_external_reference,
           "asset_category": "HOST",
+          "asset_hostname": hostname,
+          "asset_ips": ip_addresses,
+          "asset_mac_addresses": mac_addresses,
           "endpoint_agent_version": VERSION,
-          "endpoint_ips": ip_addresses,
           "endpoint_platform": get_operating_system(),
           "endpoint_arch": get_arch(),
-          "endpoint_mac_addresses": mac_addresses,
-          "endpoint_hostname": hostname::get()?.to_string_lossy(),
           "agent_is_service": is_service,
           "agent_is_elevated": is_elevated,
           "agent_executed_by_user": executed_by_user,
