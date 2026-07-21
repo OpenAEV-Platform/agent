@@ -3,6 +3,7 @@
 [![Website](https://img.shields.io/badge/website-openaev.io-blue.svg)](https://openaev.io)
 [![GitHub release](https://img.shields.io/github/release/OpenAEV-Platform/agent.svg)](https://github.com/OpenAEV-Platform/agent/releases/latest)
 [![Slack Status](https://img.shields.io/badge/slack-3K%2B%20members-4A154B)](https://community.filigran.io)
+[![codecov](https://codecov.io/gh/OpenAEV-Platform/agent/graph/badge.svg?branch=main&flag=agent)](https://codecov.io/gh/OpenAEV-Platform/agent)
 
 The following repository is used to store the OpenAEV agent for the platform. For performance and low level access, the agent is written in Rust. Please start your journey with https://doc.rust-lang.org/book.
 
