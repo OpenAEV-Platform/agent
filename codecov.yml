@@ -1,3 +1,27 @@
+codecov:
+  notify:
+    after_n_builds: 1
+
+coverage:
+  status:
+    project:
+      agent:
+        target: auto
+        informational: true
+        flags:
+          - agent
+    patch:
+      agent:
+        target: 80%
+        informational: true
+        flags:
+          - agent
+
+flags:
+  agent:
+    paths:
+      - src/
+
 comment:
   layout: "reach,diff,flags,tree"
   behavior: default
