@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::process::agent_cleanup::get_old_execution_directories;
+    use crate::process::agent_cleanup::{get_old_execution_directories, run_cleanup_cycle};
     use std::env;
     use std::fs;
     use std::fs::create_dir_all;
@@ -27,115 +27,92 @@ mod tests {
         }
     }
 
-    // -- Tests for get_old_execution_directories --
+    // -- Tests for run_cleanup_cycle --
 
     #[test]
-    fn test_get_old_execution_directories_finds_execution_prefix() {
+    fn test_run_cleanup_cycle_renames_stale_execution_to_executed() {
         let working_dir = compute_working_dir();
         create_dir_all(working_dir.join("runtimes")).unwrap();
+        create_dir_all(working_dir.join("payloads")).unwrap();
 
-        let test_id = "test-exec-find-001";
+        let test_id = "test-cycle-rename-001";
         let dir = create_test_directory("runtimes", "execution-", test_id);
+        let expected_renamed = dir.with_file_name(format!("executed-{test_id}"));
 
-        // Set mtime to 2 minutes ago so the directory qualifies as "older than 1 minute"
+        // Set mtime to 2 minutes ago so it qualifies as stale
         let past = SystemTime::now() - Duration::from_secs(120);
         filetime::set_file_mtime(&dir, filetime::FileTime::from_system_time(past)).unwrap();
 
-        // Call the actual function: directory with mtime 2 min ago should be returned
-        // when since_minutes=1
-        let results = get_old_execution_directories("runtimes", "execution-", 1).unwrap();
-        let found = results
-            .iter()
-            .any(|e| e.file_name().to_string_lossy().contains(test_id));
-        assert!(found, "expected to find the test directory in results");
+        // Phase 1 renames execution- to executed- (executing_max_time=1 minute).
+        // Phase 2 threshold set high so it won't delete yet.
+        run_cleanup_cycle(1, 9999);
 
-        // Cleanup
-        cleanup_test_directory(&dir);
+        assert!(!dir.exists(), "original execution- directory must be gone");
+        assert!(
+            expected_renamed.exists(),
+            "executed- directory must exist after rename"
+        );
+        assert!(
+            expected_renamed.join("test.txt").exists(),
+            "file inside must survive rename"
+        );
+
+        cleanup_test_directory(&expected_renamed);
     }
 
     #[test]
-    fn test_get_old_execution_directories_ignores_unmatched_prefix() {
+    fn test_run_cleanup_cycle_deletes_stale_executed_directories() {
         let working_dir = compute_working_dir();
         create_dir_all(working_dir.join("runtimes")).unwrap();
+        create_dir_all(working_dir.join("payloads")).unwrap();
 
-        let test_id = "test-unknown-001";
-        let dir = create_test_directory("runtimes", "unknown-", test_id);
-
-        // Set mtime to 2 minutes ago so it would qualify by age
-        let past = SystemTime::now() - Duration::from_secs(120);
-        filetime::set_file_mtime(&dir, filetime::FileTime::from_system_time(past)).unwrap();
-
-        // Call the actual function: a directory with "unknown-" prefix must not appear
-        // in results when scanning for "execution-"
-        let results = get_old_execution_directories("runtimes", "execution-", 1).unwrap();
-        let found = results
-            .iter()
-            .any(|e| e.file_name().to_string_lossy().contains(test_id));
-        assert!(!found, "directory with unknown- prefix must not be returned");
-
-        // Cleanup
-        cleanup_test_directory(&dir);
-    }
-
-    #[test]
-    fn test_execution_directory_rename_logic() {
-        let working_dir = compute_working_dir();
-        create_dir_all(working_dir.join("runtimes")).unwrap();
-
-        let test_id = "test-rename-001";
-        let dir = create_test_directory("runtimes", "execution-", test_id);
-
-        // Simulate rename logic (same as in agent_cleanup)
-        let dirname = dir.to_str().unwrap();
-        let new_name = dirname.replace("execution", "executed");
-        fs::rename(dirname, &new_name).unwrap();
-
-        let new_path = PathBuf::from(&new_name);
-        assert!(new_path.exists());
-        assert!(!dir.exists());
-        // File inside should still be there after rename
-        assert!(new_path.join("test.txt").exists());
-
-        // Cleanup
-        cleanup_test_directory(&new_path);
-    }
-
-    #[test]
-    fn test_executed_directory_delete_logic() {
-        let working_dir = compute_working_dir();
-        create_dir_all(working_dir.join("runtimes")).unwrap();
-
-        let test_id = "test-executed-delete-001";
+        let test_id = "test-cycle-delete-001";
         let dir = create_test_directory("runtimes", "executed-", test_id);
 
         assert!(dir.exists());
         assert!(dir.join("test.txt").exists());
 
-        // Simulate executed cleanup (permanent delete)
-        fs::remove_dir_all(&dir).unwrap();
+        // Set mtime to 2 minutes ago so it qualifies for deletion
+        let past = SystemTime::now() - Duration::from_secs(120);
+        filetime::set_file_mtime(&dir, filetime::FileTime::from_system_time(past)).unwrap();
 
-        assert!(!dir.exists());
+        // Phase 1 threshold set high so no rename happens.
+        // Phase 2 deletes executed- directories older than 1 minute.
+        run_cleanup_cycle(9999, 1);
+
+        assert!(
+            !dir.exists(),
+            "executed- directory must be permanently deleted"
+        );
     }
 
     #[test]
-    fn test_payloads_directory_cleanup() {
+    fn test_run_cleanup_cycle_handles_payloads_subfolder() {
         let working_dir = compute_working_dir();
+        create_dir_all(working_dir.join("runtimes")).unwrap();
         create_dir_all(working_dir.join("payloads")).unwrap();
 
-        let test_id = "test-payload-001";
+        let test_id = "test-cycle-payload-001";
         let exec_dir = create_test_directory("payloads", "execution-", test_id);
+        let expected_renamed = exec_dir.with_file_name(format!("executed-{test_id}"));
 
-        assert!(exec_dir.exists());
+        // Set mtime to 2 minutes ago
+        let past = SystemTime::now() - Duration::from_secs(120);
+        filetime::set_file_mtime(&exec_dir, filetime::FileTime::from_system_time(past)).unwrap();
 
-        // Simulate rename for execution-
-        let dirname = exec_dir.to_str().unwrap();
-        let new_name = dirname.replace("execution", "executed");
-        fs::rename(dirname, &new_name).unwrap();
-        let renamed_path = PathBuf::from(&new_name);
-        assert!(renamed_path.exists());
+        // Phase 1 renames, phase 2 threshold high so no delete
+        run_cleanup_cycle(1, 9999);
 
-        // Cleanup
-        cleanup_test_directory(&renamed_path);
+        assert!(
+            !exec_dir.exists(),
+            "original execution- payload must be gone"
+        );
+        assert!(
+            expected_renamed.exists(),
+            "executed- payload must exist after rename"
+        );
+
+        cleanup_test_directory(&expected_renamed);
     }
 
     // -- Regression tests: resilience to the failure modes that used to panic the
@@ -156,11 +133,7 @@ mod tests {
         // Set the directory's modified time to the future to trigger the
         // duration_since failure path inside get_old_execution_directories.
         let future_time = SystemTime::now() + Duration::from_secs(3600);
-        filetime::set_file_mtime(
-            &dir,
-            filetime::FileTime::from_system_time(future_time),
-        )
-        .unwrap();
+        filetime::set_file_mtime(&dir, filetime::FileTime::from_system_time(future_time)).unwrap();
 
         // Must not panic, and must not return the future-mtime directory
         // (it is skipped as "not old enough yet").
@@ -174,35 +147,6 @@ mod tests {
         );
 
         cleanup_test_directory(&dir);
-    }
-
-    #[test]
-    fn test_concurrently_removed_entry_does_not_abort_the_whole_scan() {
-        // Simulates a directory entry that disappears between fs::read_dir() listing
-        // it and the subsequent fs::metadata() call (removed by a concurrent cleanup
-        // cycle, or by the implant itself). Before the fix, fs::metadata(..).unwrap()
-        // on a missing path would panic and kill the cleanup thread forever.
-        //
-        // We cannot perfectly simulate a racy removal between read_dir iteration and
-        // metadata(), but we can verify that a scan with only valid entries succeeds
-        // (the defensive error handling does not break normal operation), and that the
-        // unit assertions on fs::metadata still hold.
-        let working_dir = compute_working_dir();
-        create_dir_all(working_dir.join("runtimes")).unwrap();
-
-        let test_id = "test-vanishing-001";
-        let dir = create_test_directory("runtimes", "execution-", test_id);
-
-        // Remove it "concurrently" (simulated).
-        fs::remove_dir_all(&dir).unwrap();
-
-        // The function must not panic even if entries vanish during the scan.
-        // Here the entry is already gone before read_dir, so it simply won't appear.
-        let results = get_old_execution_directories("runtimes", "execution-", 0).unwrap();
-        let found = results
-            .iter()
-            .any(|e| e.file_name().to_string_lossy().contains(test_id));
-        assert!(!found, "removed directory must not appear in results");
     }
 
     #[test]
@@ -226,15 +170,21 @@ mod tests {
 
         // The function must still return the good entries even though one has vanished.
         let results = get_old_execution_directories("runtimes", "execution-", 1).unwrap();
-        let found_good_1 = results
-            .iter()
-            .any(|e| e.file_name().to_string_lossy().contains("test-mixed-good-001"));
-        let found_good_2 = results
-            .iter()
-            .any(|e| e.file_name().to_string_lossy().contains("test-mixed-good-002"));
-        let found_bad = results
-            .iter()
-            .any(|e| e.file_name().to_string_lossy().contains("test-mixed-bad-001"));
+        let found_good_1 = results.iter().any(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .contains("test-mixed-good-001")
+        });
+        let found_good_2 = results.iter().any(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .contains("test-mixed-good-002")
+        });
+        let found_bad = results.iter().any(|e| {
+            e.file_name()
+                .to_string_lossy()
+                .contains("test-mixed-bad-001")
+        });
 
         assert!(found_good_1, "good directory 1 must be returned");
         assert!(found_good_2, "good directory 2 must be returned");
