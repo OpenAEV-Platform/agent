@@ -4,6 +4,13 @@ set -e
 base_url=${OPENAEV_URL}
 architecture=$(uname -m)
 
+# Skip TLS certificate validation only when the platform explicitly runs with
+# an unsecured (e.g. self-signed) certificate
+curl_insecure=""
+if [ "${OPENAEV_UNSECURED_CERTIFICATE}" = "true" ]; then
+  curl_insecure="-k"
+fi
+
 install_dir="${OPENAEV_INSTALL_DIR}"
 session_name="${OPENAEV_SERVICE_NAME}"
 tenant_id="${OPENAEV_TENANT_ID}"
@@ -26,7 +33,7 @@ if [ -d "$openaev_dir" ]; then
 # Upgrade the agent if the folder *openaev* exists
 
 echo "01. Downloading OpenAEV Agent into ${install_dir}..."
-curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+curl -sSfL ${curl_insecure} ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
 mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
 chmod +x ${install_dir}/openaev-agent
 
@@ -52,7 +59,7 @@ else
 # Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
 echo "01. Installing OpenAEV Agent..."
 openaev_session=$(printf %s "${session_name}" | sed 's/openbas/openaev/g')
-curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" | sh
+curl -sSfLG ${curl_insecure} ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" | sh
 
 echo "02. Uninstalling OpenBAS Agent..."
 (
