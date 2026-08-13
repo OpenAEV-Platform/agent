@@ -47,9 +47,8 @@ impl ExecutionDetails {
         Self::decode_output(&user_result_output.stdout).replace(replace_str, "")
     }
 
-    /// Picks the user to register with, given the `whoami` output and the numeric uid. `whoami`
-    /// prints nothing when the running uid has no passwd entry (random-uid containers,
-    /// systemd DynamicUser), and registering an empty user breaks job matching server-side.
+    /// `whoami` prints nothing when the running uid has no passwd entry (random-uid containers,
+    /// systemd DynamicUser), and an empty user breaks job matching server-side.
     pub fn resolve_user(whoami_user: &str, uid: &str) -> String {
         let user = whoami_user.trim();
         if !user.is_empty() {
@@ -62,7 +61,6 @@ impl ExecutionDetails {
         }
     }
 
-    /// `id -u` only runs when `whoami` came back empty, so the common path stays one command.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn get_unix_user(executor: &str, args: &[&str]) -> String {
         let user = Self::get_user_from_command(executor, args, "\n");
@@ -93,8 +91,7 @@ impl ExecutionDetails {
             "-NoProfile",
             "-Command",
         ]);
-        // No numeric uid to fall back to on Windows, but keep a single funnel for the registered
-        // user so an empty whoami output is handled the same way everywhere.
+        // No uid to fall back to on Windows, but keep one funnel for the registered user.
         let user = Self::resolve_user(
             &Self::get_user_from_command(executor, args.as_slice(), "\r\n"),
             "",

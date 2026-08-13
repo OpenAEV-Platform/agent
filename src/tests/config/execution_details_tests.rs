@@ -10,7 +10,6 @@ mod tests {
 
     #[test]
     fn test_resolve_user_keeps_whoami_output_verbatim() {
-        // The caller already stripped the platform line ending; do not alter what it kept.
         assert_eq!(
             ExecutionDetails::resolve_user("domain\\service_account", "1000"),
             "domain\\service_account"
@@ -25,7 +24,7 @@ mod tests {
 
     #[test]
     fn test_resolve_user_maps_uid_zero_to_root() {
-        // A uid 0 with no passwd entry is still root, and the elevated/service branch keys on it.
+        // uid 0 without a passwd entry is still root, and the elevated/service branch keys on it.
         assert_eq!(ExecutionDetails::resolve_user("", "0"), "root");
         assert_eq!(ExecutionDetails::resolve_user("", "0\n"), "root");
     }
