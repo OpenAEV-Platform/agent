@@ -47,6 +47,40 @@ impl ExecutionDetails {
         Self::decode_output(&user_result_output.stdout).replace(replace_str, "")
     }
 
+    /// Picks the user to register with, given the `whoami` output and the numeric uid. `whoami`
+    /// prints nothing when the running uid has no passwd entry (random-uid containers,
+    /// systemd DynamicUser), and registering an empty user breaks job matching server-side.
+    pub fn resolve_user(whoami_user: &str, uid: &str) -> String {
+        let user = whoami_user.trim();
+        if !user.is_empty() {
+            return whoami_user.to_string();
+        }
+        match uid.trim() {
+            "" => String::new(),
+            "0" => String::from("root"),
+            numeric_uid => numeric_uid.to_string(),
+        }
+    }
+
+    /// `id -u` only runs when `whoami` came back empty, so the common path stays one command.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn get_unix_user(executor: &str, args: &[&str]) -> String {
+        let user = Self::get_user_from_command(executor, args, "\n");
+        if !user.trim().is_empty() {
+            return user;
+        }
+        let uid = Self::invoke_command(executor, "id -u", args)
+            .map(|output| Self::decode_output(&output.stdout))
+            .unwrap_or_default();
+        let resolved = Self::resolve_user(&user, &uid);
+        if resolved.is_empty() {
+            error!("Could not resolve the executing user from whoami nor from id -u");
+        } else {
+            log::warn!("whoami returned no user, falling back to uid-derived user {resolved:?}");
+        }
+        resolved
+    }
+
     #[cfg(target_os = "windows")]
     pub fn new(is_service: bool) -> Result<Self, ConfigError> {
         let executor = "powershell";
@@ -59,7 +93,12 @@ impl ExecutionDetails {
             "-NoProfile",
             "-Command",
         ]);
-        let user = Self::get_user_from_command(executor, args.as_slice(), "\r\n");
+        // No numeric uid to fall back to on Windows, but keep a single funnel for the registered
+        // user so an empty whoami output is handled the same way everywhere.
+        let user = Self::resolve_user(
+            &Self::get_user_from_command(executor, args.as_slice(), "\r\n"),
+            "",
+        );
         let is_elevated_output = Self::invoke_command(executor,
                                                       "([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator);", args.as_slice());
         let is_elevated = Self::decode_output(&is_elevated_output.unwrap().clone().stdout);
@@ -74,7 +113,7 @@ impl ExecutionDetails {
     pub fn new(_is_service: bool) -> Result<Self, ConfigError> {
         let executor = "sh";
         let args = vec!["-c"];
-        let user = Self::get_user_from_command(executor, args.as_slice(), "\n");
+        let user = Self::get_unix_user(executor, args.as_slice());
         if user == "root" {
             Ok(ExecutionDetails {
                 is_elevated: true,
@@ -103,7 +142,7 @@ impl ExecutionDetails {
     pub fn new(_is_service: bool) -> Result<Self, ConfigError> {
         let executor = "sh";
         let args = vec!["-c"];
-        let user = Self::get_user_from_command(executor, args.as_slice(), "\n");
+        let user = Self::get_unix_user(executor, args.as_slice());
         if user == "root" {
             Ok(ExecutionDetails {
                 is_elevated: true,
