@@ -22,6 +22,8 @@ pub struct ExecutionDetails {
 }
 
 impl ExecutionDetails {
+    // -- COMMAND EXECUTION --
+
     pub fn invoke_command(
         executor: &str,
         cmd_expression: &str,
@@ -52,6 +54,8 @@ impl ExecutionDetails {
             .map(|output| Self::decode_output(&output.stdout))
             .unwrap_or_default()
     }
+
+    // -- USER RESOLUTION --
 
     /// Returns the `whoami` output and the reason it came back empty, so the caller reports the
     /// failure once alongside the fallback it picked instead of logging on its behalf.
@@ -125,6 +129,8 @@ impl ExecutionDetails {
         resolved
     }
 
+    // -- EXECUTION CONTEXT --
+
     #[cfg(target_os = "windows")]
     pub fn new(is_service: bool) -> Result<Self, ConfigError> {
         let executor = "powershell";
@@ -165,6 +171,8 @@ impl ExecutionDetails {
             executed_by_user: user,
         })
     }
+
+    // -- PLATFORM PROBES --
 
     #[cfg(target_os = "linux")]
     fn is_elevated_unix(executor: &str, args: &[&str]) -> bool {

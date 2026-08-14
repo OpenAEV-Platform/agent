@@ -6,14 +6,20 @@ mod tests {
     #[test]
     fn test_resolve_unix_user_keeps_whoami_output_when_present() {
         assert_eq!(ExecutionDetails::resolve_unix_user("root", "0"), "root");
-        assert_eq!(ExecutionDetails::resolve_unix_user("alice", "1000"), "alice");
+        assert_eq!(
+            ExecutionDetails::resolve_unix_user("alice", "1000"),
+            "alice"
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[test]
     fn test_resolve_unix_user_falls_back_to_numeric_uid_when_whoami_is_empty() {
         assert_eq!(ExecutionDetails::resolve_unix_user("", "63228"), "63228");
-        assert_eq!(ExecutionDetails::resolve_unix_user("   ", "63228\n"), "63228");
+        assert_eq!(
+            ExecutionDetails::resolve_unix_user("   ", "63228\n"),
+            "63228"
+        );
     }
 
     #[cfg(any(target_os = "linux", target_os = "macos"))]
@@ -29,7 +35,10 @@ mod tests {
     fn test_resolve_unix_user_is_empty_when_uid_is_not_numeric() {
         assert_eq!(ExecutionDetails::resolve_unix_user("", ""), "");
         assert_eq!(ExecutionDetails::resolve_unix_user("\n", "  "), "");
-        assert_eq!(ExecutionDetails::resolve_unix_user("", "id: no such user"), "");
+        assert_eq!(
+            ExecutionDetails::resolve_unix_user("", "id: no such user"),
+            ""
+        );
     }
 
     #[cfg(target_os = "windows")]
