@@ -40,8 +40,6 @@ impl ExecutionDetails {
         String::from_utf8_lossy(raw_bytes).to_string()
     }
 
-    /// Returns the `whoami` output and the reason it came back empty, so the caller reports the
-    /// failure once alongside the fallback it picked instead of logging on its behalf.
     fn whoami(executor: &str, args: &[&str], line_ending: &str) -> (String, String) {
         let output = match Self::invoke_command(executor, "whoami", args) {
             Ok(output) => output,
@@ -54,8 +52,6 @@ impl ExecutionDetails {
 
     // -- USER RESOLUTION --
 
-    /// One line per failed `whoami`, naming the reason and what the fallback produced. The former
-    /// "try to restart the agent" error was both misleading and doubled by the fallback warning.
     fn log_user_fallback(resolved: &str, reason: &str, fallback: &str) {
         if resolved.is_empty() {
             error!("whoami returned no user ({reason}) and neither did {fallback}");
@@ -64,10 +60,8 @@ impl ExecutionDetails {
         }
     }
 
-    /// `whoami` prints nothing when the running uid has no passwd entry (random-uid containers,
-    /// systemd DynamicUser), and an empty user breaks job matching server-side.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    pub(crate) fn resolve_unix_user(whoami_user: &str, uid: &str) -> String {
+    fn resolve_unix_user(whoami_user: &str, uid: &str) -> String {
         if !whoami_user.trim().is_empty() {
             return whoami_user.to_string();
         }
@@ -79,10 +73,8 @@ impl ExecutionDetails {
         }
     }
 
-    /// Windows has no uid to fall back to, but `$env:USERNAME` survives a `whoami` that a hardened
-    /// PowerShell policy or a broken account lookup refused. It carries no domain prefix.
     #[cfg(target_os = "windows")]
-    pub(crate) fn resolve_windows_user(whoami_user: &str, env_username: &str) -> String {
+    fn resolve_windows_user(whoami_user: &str, env_username: &str) -> String {
         if !whoami_user.trim().is_empty() {
             return whoami_user.to_string();
         }

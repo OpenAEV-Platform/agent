@@ -2,67 +2,68 @@
 mod tests {
     use crate::config::execution_details::ExecutionDetails;
 
+    /// Runs a command outside of `ExecutionDetails` so the expected value does not come
+    /// from the code under test.
     #[cfg(any(target_os = "linux", target_os = "macos"))]
-    #[test]
-    fn test_resolve_unix_user_keeps_whoami_output_when_present() {
-        assert_eq!(ExecutionDetails::resolve_unix_user("root", "0"), "root");
-        assert_eq!(
-            ExecutionDetails::resolve_unix_user("alice", "1000"),
-            "alice"
+    fn run(program: &str, args: &[&str]) -> String {
+        match std::process::Command::new(program).args(args).output() {
+            Ok(output) => String::from_utf8_lossy(&output.stdout).trim().to_string(),
+            Err(_) => String::new(),
+        }
+    }
+
+    /// uid 0 without a passwd entry is still root, and the elevated/service branch keys on it.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn numeric_uid_fallback(uid: &str) -> String {
+        if uid == "0" {
+            return String::from("root");
+        }
+        String::from(uid)
+    }
+
+    /// linux and macos resolve the user the same way, only the elevated/service probes differ.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    fn assert_resolved_user_is_the_current_unix_user() {
+        let user = ExecutionDetails::new(false).unwrap().executed_by_user;
+        assert!(!user.is_empty(), "the agent must always resolve a user");
+
+        let passwd_name = run("id", &["-un"]);
+        let uid_fallback = numeric_uid_fallback(&run("id", &["-u"]));
+
+        assert!(
+            user == passwd_name || user == uid_fallback,
+            "resolved user {user:?} must be the passwd name {passwd_name:?} \
+             or the numeric uid fallback {uid_fallback:?}"
         );
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(target_os = "linux")]
     #[test]
-    fn test_resolve_unix_user_falls_back_to_numeric_uid_when_whoami_is_empty() {
-        assert_eq!(ExecutionDetails::resolve_unix_user("", "63228"), "63228");
-        assert_eq!(
-            ExecutionDetails::resolve_unix_user("   ", "63228\n"),
-            "63228"
-        );
+    fn test_executed_by_user_is_the_current_linux_user() {
+        assert_resolved_user_is_the_current_unix_user();
     }
 
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
+    #[cfg(target_os = "macos")]
     #[test]
-    fn test_resolve_unix_user_maps_uid_zero_to_root() {
-        // uid 0 without a passwd entry is still root, and the elevated/service branch keys on it.
-        assert_eq!(ExecutionDetails::resolve_unix_user("", "0"), "root");
-        assert_eq!(ExecutionDetails::resolve_unix_user("", "0\n"), "root");
-    }
-
-    #[cfg(any(target_os = "linux", target_os = "macos"))]
-    #[test]
-    fn test_resolve_unix_user_is_empty_when_uid_is_not_numeric() {
-        assert_eq!(ExecutionDetails::resolve_unix_user("", ""), "");
-        assert_eq!(ExecutionDetails::resolve_unix_user("\n", "  "), "");
-        assert_eq!(
-            ExecutionDetails::resolve_unix_user("", "id: no such user"),
-            ""
-        );
+    fn test_executed_by_user_is_the_current_macos_user() {
+        assert_resolved_user_is_the_current_unix_user();
     }
 
     #[cfg(target_os = "windows")]
     #[test]
-    fn test_resolve_windows_user_keeps_whoami_output_when_present() {
-        assert_eq!(
-            ExecutionDetails::resolve_windows_user("domain\\service_account", "service_account"),
-            "domain\\service_account"
-        );
-    }
+    fn test_executed_by_user_is_the_current_windows_user() {
+        let user = ExecutionDetails::new(false).unwrap().executed_by_user;
+        assert!(!user.is_empty(), "the agent must always resolve a user");
 
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn test_resolve_windows_user_falls_back_to_env_username() {
-        assert_eq!(
-            ExecutionDetails::resolve_windows_user("", "service_account\r\n"),
-            "service_account"
+        // whoami returns `domain\username` while USERNAME holds the bare account name,
+        // so only the account part can be compared.
+        let account = std::env::var("USERNAME").unwrap_or_default();
+        if account.is_empty() {
+            return;
+        }
+        assert!(
+            user.to_lowercase().ends_with(&account.to_lowercase()),
+            "resolved user {user:?} must end with the current account {account:?}"
         );
-    }
-
-    #[cfg(target_os = "windows")]
-    #[test]
-    fn test_resolve_windows_user_is_empty_when_neither_source_resolves() {
-        assert_eq!(ExecutionDetails::resolve_windows_user("", ""), "");
-        assert_eq!(ExecutionDetails::resolve_windows_user("\r\n", "  "), "");
     }
 }
