@@ -104,4 +104,23 @@ mod tests {
             "Client should trust a publicly valid certificate"
         );
     }
+
+    /// Runs only in the "OS trust store" CI job, which installs a private CA into the system
+    /// store: no bundled Mozilla root can vouch for that chain, so a pass proves the store is
+    /// genuinely consulted — which test_valid_certificate_is_accepted cannot show, since the
+    /// bundled roots satisfy it on their own.
+    #[test]
+    #[ignore = "requires the os-trust-store CI job"]
+    fn test_os_trust_store_is_consulted() {
+        // -- PREPARE --
+        let url = env::var("OAEV_OS_TRUST_URL")
+            .expect("OAEV_OS_TRUST_URL must be set by the os-trust-store CI job");
+        let client = Client::new(url, TOKEN.to_string(), false, false);
+
+        // -- EXECUTE & ASSERT --
+        assert!(
+            client.get("").send().is_ok(),
+            "Client should trust a CA present only in the OS trust store"
+        );
+    }
 }
