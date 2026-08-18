@@ -518,6 +518,10 @@ jobs:
 
       - name: Generate a private CA and a 127.0.0.1 certificate
         shell: bash
+        # Git Bash rewrites the leading slash of -subj into a Windows path
+        env:
+          MSYS_NO_PATHCONV: 1
+          MSYS2_ARG_CONV_EXCL: "*"
         run: |
           openssl req -x509 -newkey rsa:2048 -sha256 -days 1 -nodes \
             -keyout ca.key -out ca.pem -subj "/CN=OpenAEV OS trust test CA" \
