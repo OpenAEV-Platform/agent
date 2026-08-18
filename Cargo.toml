@@ -10,6 +10,7 @@ network-interface = "2.0.3"
 mid = "=3.0.7"
 tracing-appender = "0.2.3"
 rolling-file = "0.2.0"
+webpki-root-certs = "1.0.9"
 
 [dependencies.reqwest]
 version = "0.13.0"

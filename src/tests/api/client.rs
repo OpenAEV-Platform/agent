@@ -85,4 +85,23 @@ mod tests {
             "Client should bypass the bad ssl"
         );
     }
+
+    #[test]
+    fn test_valid_certificate_is_accepted() {
+        // -- PREPARE --
+        // Guards the trust chain: a root store that no longer resolves public CAs fails here,
+        // whereas test_unsecured_certificate_acceptance stays green because it asserts rejection.
+        let client = Client::new(
+            "https://sha256.badssl.com/".to_string(),
+            TOKEN.to_string(),
+            false,
+            false,
+        );
+
+        // -- EXECUTE & ASSERT --
+        assert!(
+            client.get("").send().is_ok(),
+            "Client should trust a publicly valid certificate"
+        );
+    }
 }

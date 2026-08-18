@@ -1027,6 +1027,7 @@ dependencies = [
  "serde_json",
  "tracing-appender",
  "tracing-subscriber",
+ "webpki-root-certs",
  "windows-service",
  "windows-service-detector",
 ]
