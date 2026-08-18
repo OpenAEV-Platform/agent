@@ -15,8 +15,7 @@ rolling-file = "0.2.0"
 version = "0.13.0"
 features = [
     "blocking",
-    "rustls-tls",
-    "rustls-tls-native-roots",
+    "rustls",
     "json",
 ]
 default-features = false
