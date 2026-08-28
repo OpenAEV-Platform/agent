@@ -74,8 +74,6 @@ mod tests {
             "Client should not bypass the bad ssl"
         );
 
-        // If network/DNS is unavailable, this external integration call can fail for reasons
-        // unrelated to certificate validation; in that case we skip the success assertion.
         if res_with_unsecured_certificate.is_err() {
             return;
         }
@@ -89,8 +87,6 @@ mod tests {
     #[test]
     fn test_valid_certificate_is_accepted() {
         // -- PREPARE --
-        // Guards the trust chain: a root store that no longer resolves public CAs fails here,
-        // whereas test_unsecured_certificate_acceptance stays green because it asserts rejection.
         let client = Client::new(
             "https://sha256.badssl.com/".to_string(),
             TOKEN.to_string(),
@@ -105,10 +101,6 @@ mod tests {
         );
     }
 
-    /// Runs only in the "OS trust store" CI job, which installs a private CA into the system
-    /// store: no bundled Mozilla root can vouch for that chain, so a pass proves the store is
-    /// genuinely consulted — which test_valid_certificate_is_accepted cannot show, since the
-    /// bundled roots satisfy it on their own.
     #[test]
     #[ignore = "requires the os-trust-store CI job"]
     fn test_os_trust_store_is_consulted() {
