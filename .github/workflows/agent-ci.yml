@@ -476,14 +476,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  # ──────────────────────────────────────────────────────────────────
-  # OS trust store. reqwest 0.13's `rustls` feature verifies through
-  # rustls-platform-verifier, i.e. the system trust store. This job
-  # installs a private CA there and serves a certificate signed by it:
-  # no bundled Mozilla root can vouch for that chain, so a pass proves
-  # the store is genuinely consulted. It runs the #[ignore]d test the
-  # regular `tests` job skips.
-  # ──────────────────────────────────────────────────────────────────
   os-trust-store:
     name: "🔐 OS trust store (${{ matrix.os }})"
     runs-on: ${{ matrix.runner }}
