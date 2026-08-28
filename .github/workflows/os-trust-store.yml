@@ -38,19 +38,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache
-        uses: actions/cache@v6
+      - name: Set up Rust and cache
+        uses: ./.github/actions/setup-rust
         with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: cargo-os-trust-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+          cache-key: os-trust
 
       - name: Generate a private CA and a 127.0.0.1 certificate
         shell: bash
