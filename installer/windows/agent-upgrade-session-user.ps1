@@ -1,4 +1,10 @@
 [Net.ServicePointManager]::SecurityProtocol += [Net.SecurityProtocolType]::Tls12;
+if ("${OPENAEV_UNSECURED_CERTIFICATE}" -eq "true") {
+    # Skip TLS certificate validation: the platform explicitly runs with an
+    # unsecured (e.g. self-signed) certificate (PowerShell 5.1 compatible)
+    $previousCertificateValidationCallback = [System.Net.ServicePointManager]::ServerCertificateValidationCallback
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+}
 switch ($env:PROCESSOR_ARCHITECTURE)
 {
     "AMD64" {$architecture = "x86_64"; Break}
@@ -82,3 +88,6 @@ if ($isElevated) {
 Remove-Item -Force ./openaev-installer.ps1
 }
 Remove-Item -Force ./openaev-installer-session-user.exe;
+if ("${OPENAEV_UNSECURED_CERTIFICATE}" -eq "true") {
+    [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $previousCertificateValidationCallback
+}

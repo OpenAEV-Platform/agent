@@ -9,6 +9,13 @@ run() {
 
 base_url=${OPENAEV_URL}
 architecture=$(run uname -m)
+
+# Skip TLS certificate validation only when the platform explicitly runs with
+# an unsecured (e.g. self-signed) certificate
+curl_insecure=""
+if [ "${OPENAEV_UNSECURED_CERTIFICATE}" = "true" ]; then
+  curl_insecure="-k"
+fi
 systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
@@ -40,7 +47,7 @@ fi
 log "Starting upgrade script for ${os} | ${architecture}"
 
 log "01. Downloading OpenAEV Agent into ${install_dir}..."
-run curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+run curl -sSfL ${curl_insecure} ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
 mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
 run chmod +x ${install_dir}/openaev-agent
 
