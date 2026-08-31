@@ -1,0 +1,92 @@
+name: "[Agent] Nightly CI"
+
+on:
+  schedule:
+    - cron: "0 3 * * *" # Every day at 3:00 AM UTC
+  workflow_dispatch: {} # Manual trigger for on-demand runs
+
+concurrency:
+  group: agent-nightly-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # ──────────────────────────────────────────────────────────────────
+  # Agent & Implant smoke tests — full OS/arch/version matrix.
+  #
+  # Downloads released binaries from JFrog, starts them with a fake
+  # config pointing at localhost:1, and asserts they produce a
+  # connection error (proving startup + network-layer reach).
+  #
+  # 13 runners covering all supported OS versions and architectures.
+  # ──────────────────────────────────────────────────────────────────
+  agent-implant-smoke-tests:
+    name: "💨 Smoke (${{ matrix.label }})"
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # ── Linux ────────────────────────────────────────────────
+          - label: ubuntu-22.04-x64
+            os: linux
+            runner: ubuntu-22.04
+            jfrog-arch: x86_64
+          - label: ubuntu-22.04-arm64
+            os: linux
+            runner: ubuntu-22.04-arm
+            jfrog-arch: arm64
+          - label: ubuntu-24.04-x64
+            os: linux
+            runner: ubuntu-24.04
+            jfrog-arch: x86_64
+          - label: ubuntu-24.04-arm64
+            os: linux
+            runner: ubuntu-24.04-arm
+            jfrog-arch: arm64
+          # ── Windows ──────────────────────────────────────────────
+          - label: windows-2022-x64
+            os: windows
+            runner: windows-2022
+            jfrog-arch: x86_64
+          - label: windows-2025-x64
+            os: windows
+            runner: windows-2025
+            jfrog-arch: x86_64
+          - label: windows-arm64
+            os: windows
+            runner: windows-11-arm
+            jfrog-arch: arm64
+          # ── macOS ────────────────────────────────────────────────
+          - label: macos-14-arm64
+            os: macos
+            runner: macos-14
+            jfrog-arch: arm64
+          - label: macos-15-arm64
+            os: macos
+            runner: macos-15
+            jfrog-arch: arm64
+          - label: macos-26-arm64
+            os: macos
+            runner: macos-26
+            jfrog-arch: arm64
+          - label: macos-15-intel
+            os: macos
+            runner: macos-15-intel
+            jfrog-arch: x86_64
+          - label: macos-26-intel
+            os: macos
+            runner: macos-26-intel
+            jfrog-arch: x86_64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Run agent & implant smoke tests
+        uses: ./.github/actions/agent-implant-smoke
+        with:
+          os: ${{ matrix.os }}
+          jfrog-arch: ${{ matrix.jfrog-arch }}

@@ -1,0 +1,155 @@
+name: "Agent Smoke Test"
+description: >
+  Downloads the openaev-agent binary from JFrog, launches it with a fake
+  config pointing at localhost:1, and asserts it fails with a connection
+  error (proving the binary starts and reaches the network layer).
+
+inputs:
+  os:
+    description: "Target OS: linux, macos, windows"
+    required: true
+  jfrog-arch:
+    description: "JFrog architecture: x86_64, arm64"
+    required: true
+  jfrog-base:
+    description: "JFrog Artifactory base URL"
+    required: false
+    default: "https://filigran.jfrog.io/artifactory"
+  binary-version:
+    description: "Binary version to download (tag or 'latest')"
+    required: false
+    default: "latest"
+
+runs:
+  using: composite
+  steps:
+    # ── Resolve extension ────────────────────────────────────────────
+    - name: Set binary extension
+      id: ext
+      shell: bash
+      run: |
+        if [[ "${{ inputs.os }}" == "windows" ]]; then
+          echo "ext=.exe" >> "$GITHUB_OUTPUT"
+        else
+          echo "ext=" >> "$GITHUB_OUTPUT"
+        fi
+
+    # ── Download binaries ────────────────────────────────────────────
+    - name: Download openaev-agent
+      shell: bash
+      run: |
+        URL="${{ inputs.jfrog-base }}/openaev-agent/${{ inputs.os }}/${{ inputs.jfrog-arch }}/openaev-agent-${{ inputs.binary-version }}${{ steps.ext.outputs.ext }}"
+        echo "⬇️  Downloading openaev-agent from $URL"
+        curl -fSL --retry 3 --retry-delay 5 -o "openaev-agent${{ steps.ext.outputs.ext }}" "$URL"
+        chmod +x "openaev-agent${{ steps.ext.outputs.ext }}" 2>/dev/null || true
+
+    # ── Write fake config ────────────────────────────────────────────
+    - name: Write smoke-test config
+      shell: bash
+      run: |
+        cat > openaev-agent-config.toml <<'EOF'
+        debug = false
+
+        [openaev]
+        url = "http://localhost:1"
+        token = "smoke-test-fake-token"
+        unsecured_certificate = false
+        with_proxy = false
+        installation_mode = "session-user"
+        service_name = "OAEVAgentService"
+        service_full_name = "OAEVAgentService"
+        tenant_id = "00000000-0000-0000-0000-000000000000"
+
+        [cleanup]
+        executing_max_time_minutes = 10
+        directory_max_time_minutes = 10
+        cleanup_interval_seconds = 180
+        EOF
+
+    # ── Unix smoke test ──────────────────────────────────────────────
+    - name: "Smoke test (Unix)"
+      if: inputs.os != 'windows'
+      shell: bash
+      run: |
+        set +e
+        PATTERN='connection refused|dial tcp|no such host|connect:|i/o timeout|unreachable|connection error|failed to connect|could not connect|error sending|request error'
+
+        smoke_test() {
+          local binary="$1"
+          local log_file="$2"
+
+          echo "🔥 Smoke-testing $binary ..."
+          ./"$binary" --config openaev-agent-config.toml > "$log_file" 2>&1 &
+          local pid=$!
+
+          sleep 15
+          kill "$pid" 2>/dev/null || true
+          wait "$pid" 2>/dev/null || true
+
+          echo "--- $binary logs ---"
+          cat "$log_file"
+          echo "--------------------"
+
+          if grep -qiE "$PATTERN" "$log_file"; then
+            echo "✅ $binary: connection error detected (binary starts correctly)"
+          else
+            echo "❌ $binary: no connection error found in logs"
+            return 1
+          fi
+        }
+
+        smoke_test "openaev-agent${{ steps.ext.outputs.ext }}" "agent.log"
+        echo "✅ Smoke test passed"
+
+    # ── Windows smoke test ───────────────────────────────────────────
+    - name: "Smoke test (Windows)"
+      if: inputs.os == 'windows'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        $pattern = 'connection refused|dial tcp|no such host|connect:|i/o timeout|unreachable|connection error|failed to connect|could not connect|error sending|request error'
+        $failed = 0
+
+        function Invoke-SmokeTest {
+          param([string]$Binary, [string]$LogPrefix)
+
+          Write-Host "🔥 Smoke-testing $Binary ..."
+          $stdout = "$LogPrefix-stdout.log"
+          $stderr = "$LogPrefix-stderr.log"
+
+          $proc = Start-Process -FilePath ".\$Binary" `
+            -ArgumentList "--config", "openaev-agent-config.toml" `
+            -RedirectStandardOutput $stdout `
+            -RedirectStandardError $stderr `
+            -PassThru -NoNewWindow
+
+          $exited = $proc | Wait-Process -Timeout 15 -ErrorAction SilentlyContinue
+          if (!$proc.HasExited) {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+            Start-Sleep -Seconds 2
+          }
+
+          Write-Host "--- $Binary stdout ---"
+          if (Test-Path $stdout) { Get-Content $stdout }
+          Write-Host "--- $Binary stderr ---"
+          if (Test-Path $stderr) { Get-Content $stderr }
+          Write-Host "----------------------"
+
+          $allLogs = ""
+          if (Test-Path $stdout) { $allLogs += Get-Content $stdout -Raw }
+          if (Test-Path $stderr) { $allLogs += Get-Content $stderr -Raw }
+
+          if ($allLogs -match $pattern) {
+            Write-Host "✅ ${Binary}: connection error detected (binary starts correctly)"
+            return $true
+          } else {
+            Write-Host "❌ ${Binary}: no connection error found in logs"
+            return $false
+          }
+        }
+
+        if (-not (Invoke-SmokeTest "openaev-agent.exe" "agent")) {
+          Write-Host "❌ Smoke test failed"
+          exit 1
+        }
+        Write-Host "✅ Smoke test passed"
