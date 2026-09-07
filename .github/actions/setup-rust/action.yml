@@ -1,0 +1,48 @@
+name: "Set up Rust"
+description: "Install the Rust toolchain and restore the shared cargo cache."
+
+inputs:
+  cache-key:
+    description: "Cache key prefix, unique per job (e.g. 'os-trust', 'clippy')."
+    required: true
+  targets:
+    description: "Comma-separated rustup targets to add."
+    required: false
+    default: ""
+  components:
+    description: "Comma-separated rustup components to add."
+    required: false
+    default: ""
+  cache-target:
+    description: "Whether to include target/ in the cache (fast check-only jobs may skip it)."
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.targets }}
+        components: ${{ inputs.components }}
+
+    - name: Resolve cache paths
+      id: paths
+      shell: bash
+      run: |
+        {
+          echo "value<<EOF"
+          echo "~/.cargo/bin/"
+          echo "~/.cargo/registry/index/"
+          echo "~/.cargo/registry/cache/"
+          echo "~/.cargo/git/db/"
+          [ "${{ inputs.cache-target }}" = "true" ] && echo "target/"
+          echo "EOF"
+        } >> "$GITHUB_OUTPUT"
+
+    - name: Cache
+      uses: actions/cache@v6
+      with:
+        path: ${{ steps.paths.outputs.value }}
+        key: cargo-${{ inputs.cache-key }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}

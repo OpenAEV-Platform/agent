@@ -74,8 +74,6 @@ mod tests {
             "Client should not bypass the bad ssl"
         );
 
-        // If network/DNS is unavailable, this external integration call can fail for reasons
-        // unrelated to certificate validation; in that case we skip the success assertion.
         if res_with_unsecured_certificate.is_err() {
             return;
         }
@@ -83,6 +81,38 @@ mod tests {
         assert!(
             res_with_unsecured_certificate.is_ok(),
             "Client should bypass the bad ssl"
+        );
+    }
+
+    #[test]
+    fn test_valid_certificate_is_accepted() {
+        // -- PREPARE --
+        let client = Client::new(
+            "https://sha256.badssl.com/".to_string(),
+            TOKEN.to_string(),
+            false,
+            false,
+        );
+
+        // -- EXECUTE & ASSERT --
+        assert!(
+            client.get("").send().is_ok(),
+            "Client should trust a publicly valid certificate"
+        );
+    }
+
+    #[test]
+    #[ignore = "requires the os-trust-store CI job"]
+    fn test_os_trust_store_is_consulted() {
+        // -- PREPARE --
+        let url = env::var("OAEV_OS_TRUST_URL")
+            .expect("OAEV_OS_TRUST_URL must be set by the os-trust-store CI job");
+        let client = Client::new(url, TOKEN.to_string(), false, false);
+
+        // -- EXECUTE & ASSERT --
+        assert!(
+            client.get("").send().is_ok(),
+            "Client should trust a CA present only in the OS trust store"
         );
     }
 }
