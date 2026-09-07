@@ -9,6 +9,13 @@ run() {
 
 base_url=${OPENAEV_URL}
 architecture=$(run uname -m)
+
+# Skip TLS certificate validation only when the platform explicitly runs with
+# an unsecured (e.g. self-signed) certificate
+curl_insecure=""
+if [ "${OPENAEV_UNSECURED_CERTIFICATE}" = "true" ]; then
+  curl_insecure="-k"
+fi
 systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
@@ -34,7 +41,7 @@ if [ -d "$openaev_dir" ]; then
 # Upgrade the agent if the folder *openaev* exists
 
 log "01. Downloading OpenAEV Agent into ${install_dir}..."
-run curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+run curl -sSfL ${curl_insecure} ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
 mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
 run chmod 755 ${install_dir}/openaev-agent
 
@@ -61,7 +68,7 @@ else
 log "01. Installing OpenAEV Agent..."
 openaev_service=$(printf %s "${service_name}" | sed 's/openbas/openaev/g')
 tmp_installer="$(mktemp)" || die "mktemp failed"
-run curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/service/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_service}" -o "$tmp_installer"
+run curl -sSfLG ${curl_insecure} ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/service/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_service}" -o "$tmp_installer"
 run sh "$tmp_installer"
 rm -f "$tmp_installer"
 

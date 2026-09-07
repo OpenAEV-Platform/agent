@@ -20,6 +20,12 @@ if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR
 
 Write-Output "Downloading and installing OpenAEV Agent..."
 try {
+    if ("${OPENAEV_UNSECURED_CERTIFICATE}" -eq "true") {
+        # Skip TLS certificate validation: the platform explicitly runs with an
+        # unsecured (e.g. self-signed) certificate (PowerShell 5.1 compatible)
+        $previousCertificateValidationCallback = [System.Net.ServicePointManager]::ServerCertificateValidationCallback
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+    }
     Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service" -OutFile "openaev-installer.exe";
     ./openaev-installer.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}"  | Out-Null;
 	Write-Output "OpenAEV agent has been successfully installed"
@@ -28,6 +34,9 @@ try {
     Write-Output "Note: PowerShell 7 or higher is recommended. If the issue persists, consider upgrading."
     Write-Output $_
 } finally {
+    if ("${OPENAEV_UNSECURED_CERTIFICATE}" -eq "true") {
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $previousCertificateValidationCallback
+    }
     Start-Sleep -Seconds 2
     Remove-Item -Force ./openaev-installer.exe;
   	if ($location -like "*C:\Windows\System32*") { Set-Location C:\Windows\System32 }

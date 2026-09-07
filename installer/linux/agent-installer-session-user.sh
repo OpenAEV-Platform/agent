@@ -9,6 +9,13 @@ run() {
 
 base_url=${OPENAEV_URL}
 architecture=$(run uname -m)
+
+# Skip TLS certificate validation only when the platform explicitly runs with
+# an unsecured (e.g. self-signed) certificate
+curl_insecure=""
+if [ "${OPENAEV_UNSECURED_CERTIFICATE}" = "true" ]; then
+  curl_insecure="-k"
+fi
 systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
@@ -35,7 +42,7 @@ systemctl --user stop ${session_name} || log "Fail stopping ${session_name}"
 log "02. Downloading OpenAEV Agent into ${install_dir}..."
 run mkdir -p "${install_dir}"
 [ -w "${install_dir}" ] || die "Can't write to ${install_dir}"
-run curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+run curl -sSfL ${curl_insecure} ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
 run chmod +x ${install_dir}/openaev-agent
 
 log "03. Creating OpenAEV configuration file"
