@@ -25,7 +25,7 @@ launchctl bootout system /Library/LaunchDaemons/io.filigran.${service_name}.plis
 
 echo "02. Downloading OpenAEV Agent into ${install_dir}..."
 (mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
-curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+curl -sSfL -H "Authorization: Bearer ${OPENAEV_TOKEN}" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
 chmod 755 ${install_dir}/openaev-agent
 
 echo "03. Creating OpenAEV configuration file"

@@ -26,7 +26,7 @@ if [ -d "$openaev_dir" ]; then
 # Upgrade the agent if the folder *openaev* exists
 
 echo "01. Downloading OpenAEV Agent into ${install_dir}..."
-curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+curl -sSfL -H "Authorization: Bearer ${OPENAEV_TOKEN}" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
 mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
 chmod +x ${install_dir}/openaev-agent
 
@@ -52,7 +52,7 @@ else
 # Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
 echo "01. Installing OpenAEV Agent..."
 openaev_session=$(printf %s "${session_name}" | sed 's/openbas/openaev/g')
-curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" | sh
+curl -sSfLG -H "Authorization: Bearer ${OPENAEV_TOKEN}" ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" | sh
 
 echo "02. Uninstalling OpenBAS Agent..."
 (

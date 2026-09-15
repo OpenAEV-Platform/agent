@@ -27,7 +27,7 @@ if [ -d "$openaev_dir" ]; then
 
 echo "01. Downloading OpenAEV Agent into ${install_dir}..."
 (mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
-curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+curl -sSfL -H "Authorization: Bearer ${OPENAEV_TOKEN}" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
 mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
 chmod 755 ${install_dir}/openaev-agent
 
@@ -53,7 +53,7 @@ else
 # Uninstall the old named agent *openbas* and install the new named agent *openaev* if the folder openaev doesn't exist
 echo "01. Installing OpenAEV Agent..."
 openaev_service=$(printf %s "${service_name}" | sed 's/openbas/openaev/g')
-curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/service/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_service}" | sh
+curl -sSfLG -H "Authorization: Bearer ${OPENAEV_TOKEN}" ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/service/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_service}" | sh
 
 echo "02. Uninstalling OpenBAS Agent..."
 (

@@ -45,7 +45,7 @@ if [ -d "$openaev_dir" ]; then
 # Upgrade the agent if the folder *openaev* exists
 
 log "01. Downloading OpenAEV Agent into ${install_dir}..."
-run curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+run curl -sSfL -H "Authorization: Bearer ${OPENAEV_TOKEN}" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
 mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
 run chmod +x ${install_dir}/openaev-agent
 
@@ -71,7 +71,7 @@ else
 log "01. Installing OpenAEV Agent..."
 openaev_session=$(printf %s "${session_name}" | sed 's/openbas/openaev/g')
 tmp_installer="$(mktemp)" || die "mktemp failed"
-run curl -sSfLG ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" -o "$tmp_installer"
+run curl -sSfLG -H "Authorization: Bearer ${OPENAEV_TOKEN}" ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" -o "$tmp_installer"
 run sh "$tmp_installer"
 rm -f "$tmp_installer"
 
