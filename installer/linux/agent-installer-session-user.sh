@@ -35,7 +35,10 @@ systemctl --user stop ${session_name} || log "Fail stopping ${session_name}"
 log "02. Downloading OpenAEV Agent into ${install_dir}..."
 run mkdir -p "${install_dir}"
 [ -w "${install_dir}" ] || die "Can't write to ${install_dir}"
-run curl -sSfL -H "Authorization: Bearer ${OPENAEV_TOKEN}" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+hdr=$(mktemp); umask 077
+printf 'header = "Authorization: Bearer %s"\n' "${OPENAEV_TOKEN}" > "$hdr"
+run curl -sSfL --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+rm -f "$hdr"
 run chmod +x ${install_dir}/openaev-agent
 
 log "03. Creating OpenAEV configuration file"
