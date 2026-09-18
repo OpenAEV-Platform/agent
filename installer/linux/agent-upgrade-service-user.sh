@@ -40,7 +40,10 @@ fi
 log "Starting upgrade script for ${os} | ${architecture}"
 
 log "01. Downloading OpenAEV Agent into ${install_dir}..."
-run curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+hdr=$(mktemp); umask 077
+printf 'header = "Authorization: Bearer %s"\n' "${OPENAEV_TOKEN}" > "$hdr"
+run curl -sSfL --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent_upgrade
+rm -f "$hdr"
 mv ${install_dir}/openaev-agent_upgrade ${install_dir}/openaev-agent
 run chmod +x ${install_dir}/openaev-agent
 
