@@ -50,6 +50,13 @@ fi
 
 base_url=${OPENAEV_URL}
 architecture=$(uname -m)
+
+# Skip TLS certificate validation only when the platform explicitly runs with
+# an unsecured (e.g. self-signed) certificate
+curl_insecure=""
+if [ "${OPENAEV_UNSECURED_CERTIFICATE}" = "true" ]; then
+  curl_insecure="-k"
+fi
 user="$USER_ARG"
 group="$GROUP_ARG"
 
@@ -83,7 +90,7 @@ systemctl stop ${service_name} || log "Fail stopping ${service_name}"
 log "02. Downloading OpenAEV Agent into ${install_dir}..."
 run mkdir -p "${install_dir}"
 [ -w "${install_dir}" ] || die "Can't write to ${install_dir}"
-run curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+run curl -sSfL ${curl_insecure} ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
 run chmod +x ${install_dir}/openaev-agent
 
 log "03. Creating OpenAEV configuration file"

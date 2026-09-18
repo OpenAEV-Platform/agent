@@ -4,6 +4,13 @@ set -e
 base_url=${OPENAEV_URL}
 architecture=$(uname -m)
 
+# Skip TLS certificate validation only when the platform explicitly runs with
+# an unsecured (e.g. self-signed) certificate
+curl_insecure=""
+if [ "${OPENAEV_UNSECURED_CERTIFICATE}" = "true" ]; then
+  curl_insecure="-k"
+fi
+
 install_dir="${OPENAEV_INSTALL_DIR}"
 service_name="${OPENAEV_SERVICE_NAME}"
 tenant_id="${OPENAEV_TENANT_ID}"
@@ -25,7 +32,7 @@ launchctl bootout system /Library/LaunchDaemons/io.filigran.${service_name}.plis
 
 echo "02. Downloading OpenAEV Agent into ${install_dir}..."
 (mkdir -p ${install_dir} && touch ${install_dir} >/dev/null 2>&1) || (echo -n "\nFatal: Can't write to ${install_dir}\n" >&2 && exit 1)
-curl -sSfL ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
+curl -sSfL ${curl_insecure} ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o ${install_dir}/openaev-agent
 chmod 755 ${install_dir}/openaev-agent
 
 echo "03. Creating OpenAEV configuration file"
