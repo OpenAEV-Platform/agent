@@ -40,15 +40,28 @@ function New-ProtectedStagingDirectory
     {
         [void]$acl.RemoveAccessRule($rule)
     }
+
+    $allowed = @()
     foreach ($account in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators'))
     {
         $identity = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $account
-        $sid = $identity.Translate([System.Security.Principal.SecurityIdentifier])
+        $allowed += $identity.Translate([System.Security.Principal.SecurityIdentifier])
+    }
+    # The identity running this script. The session user flows are not elevated,
+    # so leaving it out would lock the caller out of its own staging directory.
+    $allowed += [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+
+    foreach ($sid in $allowed)
+    {
         $accessRule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @(
             $sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
         $acl.AddAccessRule($accessRule)
     }
-    Set-Acl -Path $directory.FullName -AclObject $acl
+
+    # Explicitly terminating: these scripts do not all set $ErrorActionPreference,
+    # and a staging directory that kept its inherited permissions would silently
+    # give up the protection this function exists for.
+    Set-Acl -Path $directory.FullName -AclObject $acl -ErrorAction Stop
 
     # For the instant between creation and the line above, the directory still
     # inherits the ACL of ProgramData. The name is a fresh GUID so nothing can
@@ -250,6 +263,9 @@ $releaseVersion = Invoke-ReleaseVerification -BaseUrl "${OPENAEV_URL}" -TenantId
     {
         throw "Agent installer exited with code ${LASTEXITCODE}"
     }
+    # Only now: recording a release that failed to install would make the
+    # next attempt look like a downgrade and block it.
+    Save-ReleaseVersion -InstallDirectory "${OPENAEV_INSTALL_DIR}" -Version $releaseVersion
 	Write-Output "OpenAEV agent has been successfully installed"
 } catch {
     Write-Output "Installation failed"
@@ -258,7 +274,6 @@ $releaseVersion = Invoke-ReleaseVerification -BaseUrl "${OPENAEV_URL}" -TenantId
     $script:installationFailed = $true
 } finally {
     Start-Sleep -Seconds 2
-    Save-ReleaseVersion -InstallDirectory "${OPENAEV_INSTALL_DIR}" -Version $releaseVersion
 Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory;
   	if ($location -like "*C:\Windows\System32*") { Set-Location C:\Windows\System32 }
 }

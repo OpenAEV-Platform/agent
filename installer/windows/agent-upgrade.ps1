@@ -36,15 +36,28 @@ function New-ProtectedStagingDirectory
     {
         [void]$acl.RemoveAccessRule($rule)
     }
+
+    $allowed = @()
     foreach ($account in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators'))
     {
         $identity = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $account
-        $sid = $identity.Translate([System.Security.Principal.SecurityIdentifier])
+        $allowed += $identity.Translate([System.Security.Principal.SecurityIdentifier])
+    }
+    # The identity running this script. The session user flows are not elevated,
+    # so leaving it out would lock the caller out of its own staging directory.
+    $allowed += [System.Security.Principal.WindowsIdentity]::GetCurrent().User
+
+    foreach ($sid in $allowed)
+    {
         $accessRule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @(
             $sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
         $acl.AddAccessRule($accessRule)
     }
-    Set-Acl -Path $directory.FullName -AclObject $acl
+
+    # Explicitly terminating: these scripts do not all set $ErrorActionPreference,
+    # and a staging directory that kept its inherited permissions would silently
+    # give up the protection this function exists for.
+    Set-Acl -Path $directory.FullName -AclObject $acl -ErrorAction Stop
 
     # For the instant between creation and the line above, the directory still
     # inherits the ACL of ProgramData. The name is a fresh GUID so nothing can
@@ -240,6 +253,16 @@ Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/pa
 $releaseVersion = Invoke-ReleaseVerification -BaseUrl "${OPENAEV_URL}" -TenantId "${OPENAEV_TENANT_ID}" -Headers @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -StagingDirectory $stagingDirectory -Artifact "agent/package/openaev/windows/${architecture}/service" -FilePath $downloadPath
 Assert-NotADowngrade -InstallDirectory "${OPENAEV_INSTALL_DIR}" -Candidate $releaseVersion
 & $downloadPath /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}" | Out-Null;
+# $ErrorActionPreference does not apply to native executables in Windows
+# PowerShell 5.1, so a failing upgrade has to be caught explicitly.
+if ($LASTEXITCODE -ne 0)
+{
+    throw "Agent installer exited with code ${LASTEXITCODE}"
+}
+# Only now: recording a release that failed to install would make the next
+# attempt look like a downgrade and block it.
+Save-ReleaseVersion -InstallDirectory "${OPENAEV_INSTALL_DIR}" -Version $releaseVersion
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory;
 }
 else
 {
@@ -261,5 +284,3 @@ Remove-Item -Force "${UninstallDir}/uninstall.exe"
 sc.exe delete "${OPENAEV_SERVICE_NAME}"
 Remove-Item -Force ./openaev-installer.ps1
 }
-Save-ReleaseVersion -InstallDirectory "${OPENAEV_INSTALL_DIR}" -Version $releaseVersion
-Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory;
