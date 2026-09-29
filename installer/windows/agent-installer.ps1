@@ -76,6 +76,15 @@ function New-ProtectedStagingDirectory
     }
     Set-Acl -Path $directory.FullName -AclObject $acl
 
+    # For the instant between creation and the line above, the directory still
+    # inherits the ACL of ProgramData, where unprivileged users can create
+    # files. The name is a fresh GUID so nothing can target it, but checking
+    # that it is empty costs nothing and removes the question.
+    if (Get-ChildItem -Path $directory.FullName -Force)
+    {
+        throw "Staging directory is not empty, refusing to install"
+    }
+
     return $directory.FullName
 }
 
