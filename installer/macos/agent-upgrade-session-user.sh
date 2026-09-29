@@ -2,22 +2,20 @@
 set -e
 
 # --- Release integrity ------------------------------------------------------
-# The trust anchor is the public key written below, shipped inside this script.
-# Nothing here asks the server what to trust, which is the whole point: an
-# attacker able to serve a tampered binary could serve a tampered digest too.
+# The platform returns a detached signature of the artifact it just served, in a
+# response header. It is checked against the public key written below, shipped
+# inside this script. Nothing here asks the server what to trust, which is the
+# point: an attacker able to serve a tampered binary could serve a tampered
+# reference too.
+
+SIGNATURE_HEADER="X-Signature-Sha256-Rsa"
+VERSION_HEADER="X-Release-Version"
 
 fail_integrity() { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
 
-# sha256sum on Linux, shasum on macOS.
-sha256_of() {
-  if command -v sha256sum >/dev/null 2>&1; then
-    sha256sum "$1" | cut -d ' ' -f 1
-  else
-    shasum -a 256 "$1" | cut -d ' ' -f 1
-  fi
+header_value() {
+  grep -i "^$2:" "$1" | head -n 1 | sed 's/^[^:]*:[[:space:]]*//' | tr -d '\r'
 }
-
-lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
 # 0 when the first version is newer than or equal to the second. Compared
 # component by component rather than as text, so 10 sorts above 9, and without
@@ -40,9 +38,9 @@ version_ge() {
 }
 
 # More than one key can be listed so a signing key can be rotated without a
-# flag day: a manifest is accepted as soon as one of them validates it. Add the
-# next key one release before it starts signing, drop the retired one a release
-# after it stops.
+# flag day: the artifact is accepted as soon as one of them validates it. Add
+# the next key one release before it starts signing, drop the retired one a
+# release after it stops.
 write_trusted_keys() {
   cat > "$1/release-1.pem" <<'PEM'
 -----BEGIN PUBLIC KEY-----
@@ -51,66 +49,53 @@ PLACEHOLDER_RELEASE_PUBLIC_KEY_1
 PEM
 }
 
-verify_manifest_signature() {
-  _manifest="$1"
-  _signature="$2"
-  _keydir="$3"
-  for _key in "$_keydir"/*.pem; do
-    [ -f "$_key" ] || continue
-    if openssl dgst -sha256 -verify "$_key" -signature "$_signature" "$_manifest" >/dev/null 2>&1; then
-      return 0
-    fi
-  done
-  return 1
-}
-
-# Fetches the manifest, checks its signature, then checks the artifact digest.
-# Prints the release version on success, fails the script otherwise.
+# A missing signature is a hard failure, never a warning: whoever can replace an
+# artifact can also strip the header that would have given them away.
 verify_release_artifact() {
   _workdir="$1"
-  _hdr="$2"
-  _base="$3"
-  _tenant="$4"
-  _artifact="$5"
-  _file="$6"
+  _headers="$2"
+  _file="$3"
 
-  curl -sSfL --config "$_hdr" "${_base}/api/tenants/${_tenant}/agent/manifest" -o "${_workdir}/manifest" \
-    || fail_integrity "Cannot download the release manifest"
-  curl -sSfL --config "$_hdr" "${_base}/api/tenants/${_tenant}/agent/manifest.sig" -o "${_workdir}/manifest.sig" \
-    || fail_integrity "Cannot download the release manifest signature"
+  _signature=$(header_value "$_headers" "$SIGNATURE_HEADER")
+  [ -n "$_signature" ] || fail_integrity "The server returned no signature for this artifact, refusing to continue"
+
+  printf '%s' "$_signature" | openssl base64 -d -A -out "${_workdir}/signature.bin" 2>/dev/null \
+    || fail_integrity "The signature returned by the server is not valid base64"
 
   mkdir -p "${_workdir}/keys" || fail_integrity "Cannot create the key directory"
   write_trusted_keys "${_workdir}/keys"
 
-  # The manifest is only worth what its signature is worth, so that comes first.
-  verify_manifest_signature "${_workdir}/manifest" "${_workdir}/manifest.sig" "${_workdir}/keys" \
-    || fail_integrity "Release manifest signature is not valid, refusing to continue"
-
-  _version=$(awk '$1 == "version" { print $2; exit }' "${_workdir}/manifest")
-  [ -n "$_version" ] || fail_integrity "Release manifest carries no version, refusing to continue"
-
-  _expected=$(awk -v key="$_artifact" '$2 == key { print $1; exit }' "${_workdir}/manifest")
-  [ -n "$_expected" ] || fail_integrity "No entry for ${_artifact} in the release manifest"
-
-  _actual=$(sha256_of "$_file")
-  [ "$(lower "$_expected")" = "$(lower "$_actual")" ] \
-    || fail_integrity "${_artifact} does not match the release manifest, refusing to continue"
-
-  printf '%s' "$_version"
+  for _key in "${_workdir}/keys"/*.pem; do
+    [ -f "$_key" ] || continue
+    if openssl dgst -sha256 -verify "$_key" -signature "${_workdir}/signature.bin" "$_file" >/dev/null 2>&1; then
+      return 0
+    fi
+  done
+  fail_integrity "Signature does not match any trusted release key, refusing to continue"
 }
 
 # A signature says an artifact is ours, not that it is the current one. Without
-# this an attacker could serve an older release, genuinely signed, whose
-# weaknesses are already public. A machine with no recorded version has no
-# baseline to compare against, which is the only way through the transition.
+# a version an attacker could serve an older release, genuinely signed, whose
+# weaknesses are already public.
+#
+# The platform does not send this header yet, so its absence only disables the
+# downgrade check rather than failing the install. Making it trustworthy means
+# binding the version into what is signed, otherwise stripping the header is
+# enough to disable the check.
 assert_not_a_downgrade() {
   _install_dir="$1"
   _candidate="$2"
+  [ -n "$_candidate" ] || return 0
   [ -r "${_install_dir}/openaev-agent.version" ] || return 0
   _installed=$(cat "${_install_dir}/openaev-agent.version")
   [ -n "$_installed" ] || return 0
   version_ge "$_candidate" "$_installed" \
     || fail_integrity "Release ${_candidate} is older than the installed ${_installed}, refusing to downgrade"
+}
+
+record_release_version() {
+  [ -n "$2" ] || return 0
+  printf '%s\n' "$2" > "${1}/openaev-agent.version"
 }
 # ----------------------------------------------------------------------------
 
@@ -139,26 +124,26 @@ if [ -d "$openaev_dir" ]; then
 # Upgrade the agent if the folder *openaev* exists
 
 echo "01. Downloading OpenAEV Agent into ${install_dir}..."
-# Staged inside the install directory: an unverified binary never sits at
-# the live path, and the final move is a rename on the same filesystem.
 # An upgrade against a directory that is not there is a misconfiguration,
 # not something to paper over by creating it.
 [ -d "${install_dir}" ] || fail_integrity "${install_dir} does not exist, nothing to upgrade"
+# Staged inside the install directory: an unverified binary never sits at
+# the live path, and the final move is a rename on the same filesystem.
 workdir=$(mktemp -d "${install_dir}/.openaev-stage-XXXXXX") || fail_integrity "Cannot create a staging directory in ${install_dir}"
 trap 'rm -rf "$workdir"' EXIT INT TERM
 hdr="${workdir}/curl.conf"
 (umask 077; printf 'header = "Authorization: Bearer %s"\n' "${OPENAEV_TOKEN}" > "$hdr")
-curl -sSfL --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o "${workdir}/openaev-agent"
+curl -sSfL --config "$hdr" -D "${workdir}/headers" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o "${workdir}/openaev-agent"
 
-release_version=$(verify_release_artifact "$workdir" "$hdr" "$base_url" "$tenant_id" "agent/executable/openaev/${os}/${architecture}" "${workdir}/openaev-agent") \
-  || fail_integrity "Release verification failed"
+verify_release_artifact "$workdir" "${workdir}/headers" "${workdir}/openaev-agent"
+release_version=$(header_value "${workdir}/headers" "$VERSION_HEADER")
 assert_not_a_downgrade "$install_dir" "$release_version"
 
 # Mode set before the rename, so the move publishes a binary that is already
 # complete, verified and executable, in one step.
 chmod +x "${workdir}/openaev-agent"
 mv "${workdir}/openaev-agent" "${install_dir}/openaev-agent"
-printf '%s\n' "$release_version" > "${install_dir}/openaev-agent.version"
+record_release_version "$install_dir" "$release_version"
 
 echo "02. Updating OpenAEV configuration file"
 cat > ${install_dir}/openaev-agent-config.toml <<EOF

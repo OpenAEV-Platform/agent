@@ -13,14 +13,17 @@ $ErrorActionPreference = 'Stop'
 $script:installationFailed = $false
 
 # --- Release integrity ------------------------------------------------------
-# The trust anchor is the certificate list below, shipped inside this script.
-# Nothing here asks the server what to trust, which is the whole point: an
-# attacker able to serve a tampered binary could serve a tampered digest too.
+# The platform returns a detached signature of the artifact it just served, in a
+# response header. It is checked against the certificate list below, shipped
+# inside this script. Nothing here asks the server what to trust, which is the
+# point: an attacker able to serve a tampered binary could serve a tampered
+# reference too.
 #
 # RSA with SHA-256, because Windows PowerShell 5.1 runs on .NET Framework and
 # has no Ed25519. More than one certificate can be listed so a signing key can
-# be rotated without a flag day: add the next one a release before it starts
-# signing, drop the retired one a release after it stops.
+# be rotated without a flag day.
+$SignatureHeader = 'X-Signature-Sha256-Rsa'
+$VersionHeader = 'X-Release-Version'
 $TrustedReleaseCertificates = @(
     'PLACEHOLDER_RELEASE_CERTIFICATE_1'
 )
@@ -32,8 +35,7 @@ function New-ProtectedStagingDirectory
 
     # Staging in the caller's working directory would leave predictable,
     # user-writable paths: an unprivileged local process could swap the
-    # executable between the digest check and the call, and the verification
-    # would prove nothing.
+    # executable between verification and the call.
     $path = Join-Path -Path $env:ProgramData -ChildPath ("openaev-stage-" + [Guid]::NewGuid().ToString('N'))
     if (-not $PSCmdlet.ShouldProcess($path, 'Create protected staging directory'))
     {
@@ -82,21 +84,41 @@ function New-ProtectedStagingDirectory
     return $directory.FullName
 }
 
-function Test-ManifestSignature
+function Get-HeaderValue
 {
     param(
-        [Parameter(Mandatory = $true)][string] $ManifestPath,
-        [Parameter(Mandatory = $true)][string] $SignaturePath
+        [Parameter(Mandatory = $true)] $ResponseHeaders,
+        [Parameter(Mandatory = $true)][string] $Name
     )
-    $manifest = [IO.File]::ReadAllBytes($ManifestPath)
-    $signature = [IO.File]::ReadAllBytes($SignaturePath)
+    foreach ($key in $ResponseHeaders.Keys)
+    {
+        if ($key -ieq $Name)
+        {
+            $value = $ResponseHeaders[$key]
+            if ($value -is [array])
+            {
+                return ($value | Select-Object -First 1)
+            }
+            return $value
+        }
+    }
+    return $null
+}
+
+function Test-ArtifactSignature
+{
+    param(
+        [Parameter(Mandatory = $true)][byte[]] $Content,
+        [Parameter(Mandatory = $true)][string] $Base64Signature
+    )
+    $signature = [Convert]::FromBase64String($Base64Signature)
     foreach ($encoded in $TrustedReleaseCertificates)
     {
         try
         {
             $der = [Convert]::FromBase64String($encoded)
             $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(, $der)
-            if ($cert.PublicKey.Key.VerifyData($manifest, 'SHA256', $signature))
+            if ($cert.PublicKey.Key.VerifyData($Content, 'SHA256', $signature))
             {
                 return $true
             }
@@ -104,101 +126,55 @@ function Test-ManifestSignature
         catch
         {
             # A certificate that will not load, or that did not sign this
-            # manifest, is not an error: the next one may still validate it.
-            Write-Verbose "Release certificate did not validate the manifest: $_"
+            # artifact, is not an error: the next one may still validate it.
+            Write-Verbose "Release certificate did not validate the artifact: $_"
         }
     }
     return $false
 }
 
-function Get-ManifestVersion
+# Downloads an artifact, refuses it unless the server signed it, and only then
+# writes it to disk. A missing signature is a hard failure, never a warning:
+# whoever can replace an artifact can also strip the header that would have
+# given them away. Returns the release version when the server sends one.
+function Save-VerifiedArtifact
 {
     param(
-        [Parameter(Mandatory = $true)][string] $ManifestPath
+        [Parameter(Mandatory = $true)][string] $Uri,
+        [Parameter(Mandatory = $true)][hashtable] $RequestHeaders,
+        [Parameter(Mandatory = $true)][string] $DestinationPath
     )
-    foreach ($line in [IO.File]::ReadAllLines($ManifestPath))
+    $response = Invoke-WebRequest -Uri $Uri -Headers $RequestHeaders -UseBasicParsing
+
+    $signature = Get-HeaderValue -ResponseHeaders $response.Headers -Name $SignatureHeader
+    if ([string]::IsNullOrEmpty($signature))
     {
-        $parts = $line.Trim() -split '\s+', 2
-        if ($parts.Count -eq 2 -and $parts[0] -eq 'version')
-        {
-            return $parts[1].Trim()
-        }
+        throw "The server returned no signature for this artifact, refusing to continue"
     }
-    return $null
-}
-
-function Get-ExpectedDigest
-{
-    param(
-        [Parameter(Mandatory = $true)][string] $ManifestPath,
-        [Parameter(Mandatory = $true)][string] $Artifact
-    )
-    foreach ($line in [IO.File]::ReadAllLines($ManifestPath))
+    if (-not (Test-ArtifactSignature -Content $response.Content -Base64Signature $signature))
     {
-        $parts = $line.Trim() -split '\s+', 2
-        if ($parts.Count -eq 2 -and $parts[1].Trim() -eq $Artifact)
-        {
-            return $parts[0].Trim()
-        }
-    }
-    return $null
-}
-
-# Fetches the manifest, checks its signature, then checks the artifact digest.
-# Returns the release version, throws otherwise.
-function Invoke-ReleaseVerification
-{
-    param(
-        [Parameter(Mandatory = $true)][string] $BaseUrl,
-        [Parameter(Mandatory = $true)][string] $TenantId,
-        [Parameter(Mandatory = $true)][hashtable] $Headers,
-        [Parameter(Mandatory = $true)][string] $StagingDirectory,
-        [Parameter(Mandatory = $true)][string] $Artifact,
-        [Parameter(Mandatory = $true)][string] $FilePath
-    )
-    $manifestPath = Join-Path -Path $StagingDirectory -ChildPath "openaev-manifest"
-    $signaturePath = Join-Path -Path $StagingDirectory -ChildPath "openaev-manifest.sig"
-
-    Invoke-WebRequest -Uri "${BaseUrl}/api/tenants/${TenantId}/agent/manifest" -Headers $Headers -OutFile $manifestPath
-    Invoke-WebRequest -Uri "${BaseUrl}/api/tenants/${TenantId}/agent/manifest.sig" -Headers $Headers -OutFile $signaturePath
-
-    # The manifest is only worth what its signature is worth, so that comes first.
-    if (-not (Test-ManifestSignature -ManifestPath $manifestPath -SignaturePath $signaturePath))
-    {
-        throw "Release manifest signature is not valid, refusing to continue"
+        throw "Signature does not match any trusted release key, refusing to continue"
     }
 
-    $version = Get-ManifestVersion -ManifestPath $manifestPath
-    if ([string]::IsNullOrEmpty($version))
-    {
-        throw "Release manifest carries no version, refusing to continue"
-    }
-
-    $expected = Get-ExpectedDigest -ManifestPath $manifestPath -Artifact $Artifact
-    if ([string]::IsNullOrEmpty($expected))
-    {
-        throw "No entry for ${Artifact} in the release manifest"
-    }
-
-    $actual = (Get-FileHash -Path $FilePath -Algorithm SHA256).Hash
-    if ($actual.ToLowerInvariant() -ne $expected.ToLowerInvariant())
-    {
-        throw "${Artifact} does not match the release manifest, refusing to continue"
-    }
-
-    return $version
+    [IO.File]::WriteAllBytes($DestinationPath, $response.Content)
+    return (Get-HeaderValue -ResponseHeaders $response.Headers -Name $VersionHeader)
 }
 
 # A signature says an artifact is ours, not that it is the current one. Without
-# this an attacker could serve an older release, genuinely signed, whose
-# weaknesses are already public. A machine with no recorded version has no
-# baseline, which is the only way through the transition.
+# a version an attacker could serve an older release, genuinely signed, whose
+# weaknesses are already public.
+#
+# The platform does not send this header yet, so its absence only disables the
+# downgrade check rather than failing the install. Making it trustworthy means
+# binding the version into what is signed, otherwise stripping the header is
+# enough to disable the check.
 function Assert-NotADowngrade
 {
     param(
-        [Parameter(Mandatory = $true)][string] $InstallDirectory,
-        [Parameter(Mandatory = $true)][string] $Candidate
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string] $InstallDirectory,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][AllowNull()][string] $Candidate
     )
+    if ([string]::IsNullOrEmpty($Candidate)) { return }
     if ([string]::IsNullOrEmpty($InstallDirectory)) { return }
     $recorded = Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version"
     if (-not (Test-Path -Path $recorded)) { return }
@@ -219,11 +195,11 @@ function Assert-NotADowngrade
 
 function Save-ReleaseVersion
 {
-    [CmdletBinding(SupportsShouldProcess)]
     param(
-        [Parameter(Mandatory = $true)][string] $InstallDirectory,
-        [Parameter(Mandatory = $true)][string] $Version
+        [Parameter(Mandatory = $true)][AllowEmptyString()][string] $InstallDirectory,
+        [Parameter(Mandatory = $true)][AllowEmptyString()][AllowNull()][string] $Version
     )
+    if ([string]::IsNullOrEmpty($Version)) { return }
     # Guarded: failing to record the version must not report a successful
     # install as failed. The upgrade path treats a missing file as "no baseline".
     if ([string]::IsNullOrEmpty($InstallDirectory) -or (-not (Test-Path -Path $InstallDirectory)))
@@ -231,11 +207,7 @@ function Save-ReleaseVersion
         Write-Output "Could not record the installed version, the next upgrade will have no baseline to compare against."
         return
     }
-    $target = Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version"
-    if ($PSCmdlet.ShouldProcess($target, 'Record the installed release version'))
-    {
-        Set-Content -Path $target -Value $Version -NoNewline
-    }
+    Set-Content -Path (Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version") -Value $Version -NoNewline
 }
 # ----------------------------------------------------------------------------
 $isElevatedPowershell = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -309,8 +281,8 @@ try {
     $stagingDirectory = New-ProtectedStagingDirectory
     if (-not $stagingDirectory) { throw "Could not create a protected staging directory, refusing to continue" }
     $downloadPath = Join-Path -Path $stagingDirectory -ChildPath "agent-installer-service-user.exe"
-    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service-user" -Headers @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -OutFile $downloadPath;
-$releaseVersion = Invoke-ReleaseVerification -BaseUrl "${OPENAEV_URL}" -TenantId "${OPENAEV_TENANT_ID}" -Headers @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -StagingDirectory $stagingDirectory -Artifact "agent/package/openaev/windows/${architecture}/service-user" -FilePath $downloadPath
+    $releaseVersion = Save-VerifiedArtifact -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service-user" -RequestHeaders @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -DestinationPath $downloadPath
+
     # Use the resolved full installation path
     & $downloadPath /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$fullInstallPath" ~TENANT_ID="${OPENAEV_TENANT_ID}" ~USER="$User" ~PASSWORD="$Password" | Out-Null;
     # $ErrorActionPreference does not apply to native executables in Windows
@@ -319,9 +291,10 @@ $releaseVersion = Invoke-ReleaseVerification -BaseUrl "${OPENAEV_URL}" -TenantId
     {
         throw "Agent installer exited with code ${LASTEXITCODE}"
     }
-    # Only now: recording a release that failed to install would make the
-    # next attempt look like a downgrade and block it.
+    # Only now: recording a release that failed to install would make the next
+    # attempt look like a downgrade and block it.
     Save-ReleaseVersion -InstallDirectory "$fullInstallPath" -Version $releaseVersion
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory;
     Write-Output "OpenAEV agent has been successfully installed"
 } catch {
     Write-Output "Installation failed"
@@ -330,7 +303,6 @@ $releaseVersion = Invoke-ReleaseVerification -BaseUrl "${OPENAEV_URL}" -TenantId
     $script:installationFailed = $true
 } finally {
     Start-Sleep -Seconds 2
-Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory;
   	if ($location -like "*C:\Windows\System32*") { Set-Location C:\Windows\System32 }
 }
 
