@@ -92,6 +92,11 @@ write_trusted_keys "$keydir"
 verify_manifest_signature "${workdir}/manifest" "${workdir}/manifest.sig" "$keydir" \
   || die "Release manifest signature is not valid, refusing to install"
 
+# Recorded next to the binary so the upgrade path can refuse an older release
+# later. A signature says the artifact is ours, not that it is the current one.
+manifest_version=$(awk '$1 == "version" { print $2; exit }' "${workdir}/manifest")
+[ -n "$manifest_version" ] || die "Release manifest carries no version, refusing to install"
+
 artifact="agent/executable/openaev/${os}/${architecture}"
 expected=$(awk -v key="$artifact" '$2 == key { print $1; exit }' "${workdir}/manifest")
 [ -n "$expected" ] || die "No entry for ${artifact} in the release manifest, refusing to install"
@@ -99,11 +104,12 @@ expected=$(awk -v key="$artifact" '$2 == key { print $1; exit }' "${workdir}/man
 actual=$(sha256sum "${workdir}/openaev-agent" | cut -d ' ' -f 1)
 [ "$(lower "$expected")" = "$(lower "$actual")" ] || die "Agent binary does not match the release manifest, refusing to install"
 
-log "    Signature and digest verified."
+log "    Signature and digest verified, release ${manifest_version}."
 # Mode set before the rename, so the move publishes a binary that is already
 # complete, verified and executable, in one step.
 run chmod 755 "${workdir}/openaev-agent"
 run mv "${workdir}/openaev-agent" "${install_dir}/openaev-agent"
+printf '%s\n' "$manifest_version" > "${install_dir}/openaev-agent.version"
 
 log "04. Creating OpenAEV configuration file"
 cat > ${install_dir}/openaev-agent-config.toml <<EOF || die "Unable to write ${install_dir}/openaev-agent-config.toml"

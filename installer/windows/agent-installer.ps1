@@ -88,6 +88,22 @@ function New-ProtectedStagingDirectory
     return $directory.FullName
 }
 
+function Get-ManifestVersion
+{
+    param(
+        [Parameter(Mandatory = $true)][string] $ManifestPath
+    )
+    foreach ($line in [IO.File]::ReadAllLines($ManifestPath))
+    {
+        $parts = $line.Trim() -split '\s+', 2
+        if ($parts.Count -eq 2 -and $parts[0] -eq 'version')
+        {
+            return $parts[1].Trim()
+        }
+    }
+    return $null
+}
+
 function Get-ExpectedDigest
 {
     param(
@@ -151,6 +167,15 @@ try {
         throw "Release manifest signature is not valid, refusing to install"
     }
 
+    # Recorded next to the install so the upgrade path can refuse an older
+    # release later. A signature says the artifact is ours, not that it is the
+    # current one.
+    $manifestVersion = Get-ManifestVersion -ManifestPath $manifestPath
+    if ([string]::IsNullOrEmpty($manifestVersion))
+    {
+        throw "Release manifest carries no version, refusing to install"
+    }
+
     $expected = Get-ExpectedDigest -ManifestPath $manifestPath -Artifact $artifact
     if ([string]::IsNullOrEmpty($expected))
     {
@@ -162,7 +187,7 @@ try {
     {
         throw "Agent installer does not match the release manifest, refusing to install"
     }
-    Write-Output "Signature and digest verified."
+    Write-Output "Signature and digest verified, release ${manifestVersion}."
 
     & $installerPath /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}"  | Out-Null;
     # $ErrorActionPreference does not apply to native executables in Windows
@@ -170,6 +195,16 @@ try {
     if ($LASTEXITCODE -ne 0)
     {
         throw "Agent installer exited with code ${LASTEXITCODE}"
+    }
+    # Guarded: failing to record the version must not report a successful
+    # install as failed. The upgrade path treats a missing file as "no baseline".
+    if ((-not [string]::IsNullOrEmpty($OPENAEV_INSTALL_DIR)) -and (Test-Path -Path $OPENAEV_INSTALL_DIR))
+    {
+        Set-Content -Path (Join-Path -Path $OPENAEV_INSTALL_DIR -ChildPath "openaev-agent.version") -Value $manifestVersion -NoNewline
+    }
+    else
+    {
+        Write-Output "Could not record the installed version, the next upgrade will have no baseline to compare against."
     }
 	Write-Output "OpenAEV agent has been successfully installed"
 } catch {
