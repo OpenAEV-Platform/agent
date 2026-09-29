@@ -1,18 +1,48 @@
 #!/bin/sh
 set -e
 
-log() { printf '%s\n' "$*" >&2; }
-die() { log "[ERROR] $*"; exit 1; }
-run() {
-  "$@" || die "$*"
+# --- Release integrity ------------------------------------------------------
+# The trust anchor is the public key written below, shipped inside this script.
+# Nothing here asks the server what to trust, which is the whole point: an
+# attacker able to serve a tampered binary could serve a tampered digest too.
+
+fail_integrity() { printf '[ERROR] %s\n' "$*" >&2; exit 1; }
+
+# sha256sum on Linux, shasum on macOS.
+sha256_of() {
+  if command -v sha256sum >/dev/null 2>&1; then
+    sha256sum "$1" | cut -d ' ' -f 1
+  else
+    shasum -a 256 "$1" | cut -d ' ' -f 1
+  fi
 }
+
 lower() { printf '%s' "$1" | tr '[:upper:]' '[:lower:]'; }
 
-# Public keys accepted for release manifests, in PEM SubjectPublicKeyInfo form.
-# More than one can be listed so a signing key can be rotated without a flag
-# day: a manifest is accepted as soon as one of them validates its signature.
-# Add the next key here one release before it starts signing, and drop the
-# retired one a release after it stops.
+# 0 when the first version is newer than or equal to the second. Compared
+# component by component rather than as text, so 10 sorts above 9, and without
+# sort -V, which is not portable between Linux and macOS.
+version_ge() {
+  _a="$1"
+  _b="$2"
+  while [ -n "$_a" ] || [ -n "$_b" ]; do
+    case "$_a" in *.*) _pa=${_a%%.*}; _a=${_a#*.} ;; *) _pa=$_a; _a="" ;; esac
+    case "$_b" in *.*) _pb=${_b%%.*}; _b=${_b#*.} ;; *) _pb=$_b; _b="" ;; esac
+    [ -n "$_pa" ] || _pa=0
+    [ -n "$_pb" ] || _pb=0
+    while [ "$_pa" != "${_pa#0}" ] && [ -n "${_pa#0}" ]; do _pa=${_pa#0}; done
+    while [ "$_pb" != "${_pb#0}" ] && [ -n "${_pb#0}" ]; do _pb=${_pb#0}; done
+    case "$_pa$_pb" in *[!0-9]*) return 1 ;; esac
+    [ "$_pa" -gt "$_pb" ] && return 0
+    [ "$_pa" -lt "$_pb" ] && return 1
+  done
+  return 0
+}
+
+# More than one key can be listed so a signing key can be rotated without a
+# flag day: a manifest is accepted as soon as one of them validates it. Add the
+# next key one release before it starts signing, drop the retired one a release
+# after it stops.
 write_trusted_keys() {
   cat > "$1/release-1.pem" <<'PEM'
 -----BEGIN PUBLIC KEY-----
@@ -21,8 +51,6 @@ PLACEHOLDER_RELEASE_PUBLIC_KEY_1
 PEM
 }
 
-# A manifest is trusted only if one of the keys above signed it. Nothing here
-# talks to the server: the anchor is the key shipped inside this script.
 verify_manifest_signature() {
   _manifest="$1"
   _signature="$2"
@@ -34,6 +62,62 @@ verify_manifest_signature() {
     fi
   done
   return 1
+}
+
+# Fetches the manifest, checks its signature, then checks the artifact digest.
+# Prints the release version on success, fails the script otherwise.
+verify_release_artifact() {
+  _workdir="$1"
+  _hdr="$2"
+  _base="$3"
+  _tenant="$4"
+  _artifact="$5"
+  _file="$6"
+
+  curl -sSfL --config "$_hdr" "${_base}/api/tenants/${_tenant}/agent/manifest" -o "${_workdir}/manifest" \
+    || fail_integrity "Cannot download the release manifest"
+  curl -sSfL --config "$_hdr" "${_base}/api/tenants/${_tenant}/agent/manifest.sig" -o "${_workdir}/manifest.sig" \
+    || fail_integrity "Cannot download the release manifest signature"
+
+  mkdir -p "${_workdir}/keys" || fail_integrity "Cannot create the key directory"
+  write_trusted_keys "${_workdir}/keys"
+
+  # The manifest is only worth what its signature is worth, so that comes first.
+  verify_manifest_signature "${_workdir}/manifest" "${_workdir}/manifest.sig" "${_workdir}/keys" \
+    || fail_integrity "Release manifest signature is not valid, refusing to continue"
+
+  _version=$(awk '$1 == "version" { print $2; exit }' "${_workdir}/manifest")
+  [ -n "$_version" ] || fail_integrity "Release manifest carries no version, refusing to continue"
+
+  _expected=$(awk -v key="$_artifact" '$2 == key { print $1; exit }' "${_workdir}/manifest")
+  [ -n "$_expected" ] || fail_integrity "No entry for ${_artifact} in the release manifest"
+
+  _actual=$(sha256_of "$_file")
+  [ "$(lower "$_expected")" = "$(lower "$_actual")" ] \
+    || fail_integrity "${_artifact} does not match the release manifest, refusing to continue"
+
+  printf '%s' "$_version"
+}
+
+# A signature says an artifact is ours, not that it is the current one. Without
+# this an attacker could serve an older release, genuinely signed, whose
+# weaknesses are already public. A machine with no recorded version has no
+# baseline to compare against, which is the only way through the transition.
+assert_not_a_downgrade() {
+  _install_dir="$1"
+  _candidate="$2"
+  [ -r "${_install_dir}/openaev-agent.version" ] || return 0
+  _installed=$(cat "${_install_dir}/openaev-agent.version")
+  [ -n "$_installed" ] || return 0
+  version_ge "$_candidate" "$_installed" \
+    || fail_integrity "Release ${_candidate} is older than the installed ${_installed}, refusing to downgrade"
+}
+# ----------------------------------------------------------------------------
+
+log() { printf '%s\n' "$*" >&2; }
+die() { log "[ERROR] $*"; exit 1; }
+run() {
+  "$@" || die "$*"
 }
 
 base_url=${OPENAEV_URL}
@@ -55,9 +139,6 @@ else
   log "Systemd is in acceptable state: $systemd_status"
 fi
 
-command -v openssl >/dev/null 2>&1 || die "openssl is required to verify the agent binary"
-command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required to verify the agent binary"
-
 log "Starting install script for ${os} | ${architecture}"
 
 log "01. Stopping existing openaev-agent..."
@@ -66,52 +147,24 @@ systemctl stop ${service_name} || log "Fail stopping ${service_name}"
 log "02. Downloading OpenAEV Agent into ${install_dir}..."
 run mkdir -p "${install_dir}"
 [ -w "${install_dir}" ] || die "Can't write to ${install_dir}"
-
-# Staged inside the install directory, not in /tmp: the final move has to be a
-# rename on the same filesystem to be atomic. Across filesystems mv copies, and
-# a service starting mid-copy would see a partial binary.
-workdir=$(run mktemp -d "${install_dir}/.openaev-install-XXXXXX")
+# Staged inside the install directory: an unverified binary never sits at
+# the live path, and the final move is a rename on the same filesystem.
+workdir=$(mktemp -d "${install_dir}/.openaev-stage-XXXXXX") || fail_integrity "Cannot create a staging directory in ${install_dir}"
 trap 'rm -rf "$workdir"' EXIT INT TERM
 hdr="${workdir}/curl.conf"
 (umask 077; printf 'header = "Authorization: Bearer %s"\n' "${OPENAEV_TOKEN}" > "$hdr")
-
-# Downloaded out of the way: an unverified binary never sits at the install
-# path itself, where a later run or a restarting service could pick it up.
 run curl -sSfL --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o "${workdir}/openaev-agent"
 
-log "03. Verifying the downloaded binary..."
-run curl -sSfL --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/manifest -o "${workdir}/manifest"
-run curl -sSfL --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/manifest.sig -o "${workdir}/manifest.sig"
+release_version=$(verify_release_artifact "$workdir" "$hdr" "$base_url" "$tenant_id" "agent/executable/openaev/${os}/${architecture}" "${workdir}/openaev-agent") \
+  || fail_integrity "Release verification failed"
 
-keydir="${workdir}/keys"
-run mkdir -p "$keydir"
-write_trusted_keys "$keydir"
-
-# From here on everything is local. The manifest is only worth what its
-# signature is worth, so that is checked first.
-verify_manifest_signature "${workdir}/manifest" "${workdir}/manifest.sig" "$keydir" \
-  || die "Release manifest signature is not valid, refusing to install"
-
-# Recorded next to the binary so the upgrade path can refuse an older release
-# later. A signature says the artifact is ours, not that it is the current one.
-manifest_version=$(awk '$1 == "version" { print $2; exit }' "${workdir}/manifest")
-[ -n "$manifest_version" ] || die "Release manifest carries no version, refusing to install"
-
-artifact="agent/executable/openaev/${os}/${architecture}"
-expected=$(awk -v key="$artifact" '$2 == key { print $1; exit }' "${workdir}/manifest")
-[ -n "$expected" ] || die "No entry for ${artifact} in the release manifest, refusing to install"
-
-actual=$(sha256sum "${workdir}/openaev-agent" | cut -d ' ' -f 1)
-[ "$(lower "$expected")" = "$(lower "$actual")" ] || die "Agent binary does not match the release manifest, refusing to install"
-
-log "    Signature and digest verified, release ${manifest_version}."
 # Mode set before the rename, so the move publishes a binary that is already
 # complete, verified and executable, in one step.
 run chmod 755 "${workdir}/openaev-agent"
 run mv "${workdir}/openaev-agent" "${install_dir}/openaev-agent"
-printf '%s\n' "$manifest_version" > "${install_dir}/openaev-agent.version"
+printf '%s\n' "$release_version" > "${install_dir}/openaev-agent.version"
 
-log "04. Creating OpenAEV configuration file"
+log "03. Creating OpenAEV configuration file"
 cat > ${install_dir}/openaev-agent-config.toml <<EOF || die "Unable to write ${install_dir}/openaev-agent-config.toml"
 debug=false
 
@@ -125,7 +178,7 @@ service_name = "${OPENAEV_SERVICE_NAME}"
 tenant_id = "${OPENAEV_TENANT_ID}"
 EOF
 
-log "05. Writing agent service"
+log "04. Writing agent service"
 cat > ${install_dir}/${service_name}.service <<EOF || die "Unable to write ${install_dir}/${service_name}.service"
 [Unit]
 Description=OpenAEV Agent
@@ -140,7 +193,7 @@ RestartSec=60
 WantedBy=multi-user.target
 EOF
 
-log "06. Starting agent service"
+log "05. Starting agent service"
 run ln -sf ${install_dir}/${service_name}.service /etc/systemd/system/
 run systemctl daemon-reload
 run systemctl enable ${service_name}

@@ -1,17 +1,65 @@
 [Net.ServicePointManager]::SecurityProtocol += [Net.SecurityProtocolType]::Tls12;
-# Without this a failed download or a failed verification is only written to the
-# output and the script still exits 0, so the caller cannot tell.
+# Without this a failed download or a failed verification is only written to
+# the output and the script still exits 0, so the caller cannot tell.
 $ErrorActionPreference = 'Stop'
+$script:installationFailed = $false
 
-# Certificates accepted for release manifests, base64 DER. More than one can be
-# listed so a signing key can be rotated without a flag day: a manifest is
-# accepted as soon as one of them validates its signature. Add the next one a
-# release before it starts signing, drop the retired one a release after.
+# --- Release integrity ------------------------------------------------------
+# The trust anchor is the certificate list below, shipped inside this script.
+# Nothing here asks the server what to trust, which is the whole point: an
+# attacker able to serve a tampered binary could serve a tampered digest too.
+#
 # RSA with SHA-256, because Windows PowerShell 5.1 runs on .NET Framework and
-# has no Ed25519.
+# has no Ed25519. More than one certificate can be listed so a signing key can
+# be rotated without a flag day: add the next one a release before it starts
+# signing, drop the retired one a release after it stops.
 $TrustedReleaseCertificates = @(
     'PLACEHOLDER_RELEASE_CERTIFICATE_1'
 )
+
+function New-ProtectedStagingDirectory
+{
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
+    # Staging in the caller's working directory would leave predictable,
+    # user-writable paths: an unprivileged local process could swap the
+    # executable between the digest check and the call, and the verification
+    # would prove nothing.
+    $path = Join-Path -Path $env:ProgramData -ChildPath ("openaev-stage-" + [Guid]::NewGuid().ToString('N'))
+    if (-not $PSCmdlet.ShouldProcess($path, 'Create protected staging directory'))
+    {
+        return $null
+    }
+
+    $directory = New-Item -ItemType Directory -Path $path -Force
+
+    $acl = Get-Acl -Path $directory.FullName
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($rule in @($acl.Access))
+    {
+        [void]$acl.RemoveAccessRule($rule)
+    }
+    foreach ($account in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators'))
+    {
+        $identity = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $account
+        $sid = $identity.Translate([System.Security.Principal.SecurityIdentifier])
+        $accessRule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @(
+            $sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($accessRule)
+    }
+    Set-Acl -Path $directory.FullName -AclObject $acl
+
+    # For the instant between creation and the line above, the directory still
+    # inherits the ACL of ProgramData. The name is a fresh GUID so nothing can
+    # target it, but checking that it is empty removes the question.
+    if (Get-ChildItem -Path $directory.FullName -Force)
+    {
+        throw "Staging directory is not empty, refusing to continue"
+    }
+
+    return $directory.FullName
+}
 
 function Test-ManifestSignature
 {
@@ -40,52 +88,6 @@ function Test-ManifestSignature
         }
     }
     return $false
-}
-
-function New-ProtectedStagingDirectory
-{
-    [CmdletBinding(SupportsShouldProcess)]
-    param()
-
-    # Staging in the caller's working directory would leave predictable,
-    # user-writable paths: an unprivileged local process could swap the
-    # executable between the digest check and the call, and the verification
-    # would prove nothing. This directory is unguessable and reachable only by
-    # SYSTEM and Administrators.
-    $path = Join-Path -Path $env:ProgramData -ChildPath ("openaev-install-" + [Guid]::NewGuid().ToString('N'))
-    if (-not $PSCmdlet.ShouldProcess($path, 'Create protected staging directory'))
-    {
-        return $null
-    }
-
-    $directory = New-Item -ItemType Directory -Path $path -Force
-
-    $acl = Get-Acl -Path $directory.FullName
-    $acl.SetAccessRuleProtection($true, $false)
-    foreach ($rule in @($acl.Access))
-    {
-        [void]$acl.RemoveAccessRule($rule)
-    }
-    foreach ($account in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators'))
-    {
-        $identity = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $account
-        $sid = $identity.Translate([System.Security.Principal.SecurityIdentifier])
-        $accessRule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @(
-            $sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
-        $acl.AddAccessRule($accessRule)
-    }
-    Set-Acl -Path $directory.FullName -AclObject $acl
-
-    # For the instant between creation and the line above, the directory still
-    # inherits the ACL of ProgramData, where unprivileged users can create
-    # files. The name is a fresh GUID so nothing can target it, but checking
-    # that it is empty costs nothing and removes the question.
-    if (Get-ChildItem -Path $directory.FullName -Force)
-    {
-        throw "Staging directory is not empty, refusing to install"
-    }
-
-    return $directory.FullName
 }
 
 function Get-ManifestVersion
@@ -121,6 +123,100 @@ function Get-ExpectedDigest
     return $null
 }
 
+# Fetches the manifest, checks its signature, then checks the artifact digest.
+# Returns the release version, throws otherwise.
+function Invoke-ReleaseVerification
+{
+    param(
+        [Parameter(Mandatory = $true)][string] $BaseUrl,
+        [Parameter(Mandatory = $true)][string] $TenantId,
+        [Parameter(Mandatory = $true)][hashtable] $Headers,
+        [Parameter(Mandatory = $true)][string] $StagingDirectory,
+        [Parameter(Mandatory = $true)][string] $Artifact,
+        [Parameter(Mandatory = $true)][string] $FilePath
+    )
+    $manifestPath = Join-Path -Path $StagingDirectory -ChildPath "openaev-manifest"
+    $signaturePath = Join-Path -Path $StagingDirectory -ChildPath "openaev-manifest.sig"
+
+    Invoke-WebRequest -Uri "${BaseUrl}/api/tenants/${TenantId}/agent/manifest" -Headers $Headers -OutFile $manifestPath
+    Invoke-WebRequest -Uri "${BaseUrl}/api/tenants/${TenantId}/agent/manifest.sig" -Headers $Headers -OutFile $signaturePath
+
+    # The manifest is only worth what its signature is worth, so that comes first.
+    if (-not (Test-ManifestSignature -ManifestPath $manifestPath -SignaturePath $signaturePath))
+    {
+        throw "Release manifest signature is not valid, refusing to continue"
+    }
+
+    $version = Get-ManifestVersion -ManifestPath $manifestPath
+    if ([string]::IsNullOrEmpty($version))
+    {
+        throw "Release manifest carries no version, refusing to continue"
+    }
+
+    $expected = Get-ExpectedDigest -ManifestPath $manifestPath -Artifact $Artifact
+    if ([string]::IsNullOrEmpty($expected))
+    {
+        throw "No entry for ${Artifact} in the release manifest"
+    }
+
+    $actual = (Get-FileHash -Path $FilePath -Algorithm SHA256).Hash
+    if ($actual.ToLowerInvariant() -ne $expected.ToLowerInvariant())
+    {
+        throw "${Artifact} does not match the release manifest, refusing to continue"
+    }
+
+    return $version
+}
+
+# A signature says an artifact is ours, not that it is the current one. Without
+# this an attacker could serve an older release, genuinely signed, whose
+# weaknesses are already public. A machine with no recorded version has no
+# baseline, which is the only way through the transition.
+function Assert-NotADowngrade
+{
+    param(
+        [Parameter(Mandatory = $true)][string] $InstallDirectory,
+        [Parameter(Mandatory = $true)][string] $Candidate
+    )
+    if ([string]::IsNullOrEmpty($InstallDirectory)) { return }
+    $recorded = Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version"
+    if (-not (Test-Path -Path $recorded)) { return }
+    $installed = (Get-Content -Path $recorded -Raw).Trim()
+    if ([string]::IsNullOrEmpty($installed)) { return }
+
+    $parsedCandidate = $null
+    $parsedInstalled = $null
+    if ((-not [version]::TryParse($Candidate, [ref]$parsedCandidate)) -or (-not [version]::TryParse($installed, [ref]$parsedInstalled)))
+    {
+        throw "Cannot compare release ${Candidate} with the installed ${installed}, refusing to continue"
+    }
+    if ($parsedCandidate -lt $parsedInstalled)
+    {
+        throw "Release ${Candidate} is older than the installed ${installed}, refusing to downgrade"
+    }
+}
+
+function Save-ReleaseVersion
+{
+    [CmdletBinding(SupportsShouldProcess)]
+    param(
+        [Parameter(Mandatory = $true)][string] $InstallDirectory,
+        [Parameter(Mandatory = $true)][string] $Version
+    )
+    # Guarded: failing to record the version must not report a successful
+    # install as failed. The upgrade path treats a missing file as "no baseline".
+    if ([string]::IsNullOrEmpty($InstallDirectory) -or (-not (Test-Path -Path $InstallDirectory)))
+    {
+        Write-Output "Could not record the installed version, the next upgrade will have no baseline to compare against."
+        return
+    }
+    $target = Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version"
+    if ($PSCmdlet.ShouldProcess($target, 'Record the installed release version'))
+    {
+        Set-Content -Path $target -Value $Version -NoNewline
+    }
+}
+# ----------------------------------------------------------------------------
 $isElevatedPowershell = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 if ($isElevatedPowershell -like "False") { throw "PowerShell 'Run as Administrator' is required for installation" }
 # Can't install the OpenAEV agent in System32 location because NSIS 64 exe
@@ -140,71 +236,19 @@ switch ($env:PROCESSOR_ARCHITECTURE)
 }
 if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR_ARCHITECTURE is not supported yet, please create a ticket in openaev github project" }
 
-$script:installationFailed = $false
-$headers = @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" }
-$artifact = "agent/package/openaev/windows/${architecture}/service"
-$staging = $null
-
 Write-Output "Downloading and installing OpenAEV Agent..."
 try {
-    $staging = New-ProtectedStagingDirectory
-    if (-not $staging)
-    {
-        throw "Could not create a protected staging directory, refusing to install"
-    }
-    $installerPath = Join-Path $staging "openaev-installer.exe"
-    $manifestPath = Join-Path $staging "openaev-manifest"
-    $signaturePath = Join-Path $staging "openaev-manifest.sig"
-
-    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service" -Headers $headers -OutFile $installerPath;
-    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/manifest" -Headers $headers -OutFile $manifestPath;
-    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/manifest.sig" -Headers $headers -OutFile $signaturePath;
-
-    # From here on everything is local. The manifest is only worth what its
-    # signature is worth, so that is checked first.
-    if (-not (Test-ManifestSignature -ManifestPath $manifestPath -SignaturePath $signaturePath))
-    {
-        throw "Release manifest signature is not valid, refusing to install"
-    }
-
-    # Recorded next to the install so the upgrade path can refuse an older
-    # release later. A signature says the artifact is ours, not that it is the
-    # current one.
-    $manifestVersion = Get-ManifestVersion -ManifestPath $manifestPath
-    if ([string]::IsNullOrEmpty($manifestVersion))
-    {
-        throw "Release manifest carries no version, refusing to install"
-    }
-
-    $expected = Get-ExpectedDigest -ManifestPath $manifestPath -Artifact $artifact
-    if ([string]::IsNullOrEmpty($expected))
-    {
-        throw "No entry for ${artifact} in the release manifest, refusing to install"
-    }
-
-    $actual = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash
-    if ($actual.ToLowerInvariant() -ne $expected.ToLowerInvariant())
-    {
-        throw "Agent installer does not match the release manifest, refusing to install"
-    }
-    Write-Output "Signature and digest verified, release ${manifestVersion}."
-
-    & $installerPath /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}"  | Out-Null;
+    $stagingDirectory = New-ProtectedStagingDirectory
+    if (-not $stagingDirectory) { throw "Could not create a protected staging directory, refusing to continue" }
+    $downloadPath = Join-Path -Path $stagingDirectory -ChildPath "openaev-installer.exe"
+    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service" -Headers @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -OutFile $downloadPath;
+$releaseVersion = Invoke-ReleaseVerification -BaseUrl "${OPENAEV_URL}" -TenantId "${OPENAEV_TENANT_ID}" -Headers @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -StagingDirectory $stagingDirectory -Artifact "agent/package/openaev/windows/${architecture}/service" -FilePath $downloadPath
+    & $downloadPath /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}"  | Out-Null;
     # $ErrorActionPreference does not apply to native executables in Windows
     # PowerShell 5.1, so a failing installer has to be caught explicitly.
     if ($LASTEXITCODE -ne 0)
     {
         throw "Agent installer exited with code ${LASTEXITCODE}"
-    }
-    # Guarded: failing to record the version must not report a successful
-    # install as failed. The upgrade path treats a missing file as "no baseline".
-    if ((-not [string]::IsNullOrEmpty($OPENAEV_INSTALL_DIR)) -and (Test-Path -Path $OPENAEV_INSTALL_DIR))
-    {
-        Set-Content -Path (Join-Path -Path $OPENAEV_INSTALL_DIR -ChildPath "openaev-agent.version") -Value $manifestVersion -NoNewline
-    }
-    else
-    {
-        Write-Output "Could not record the installed version, the next upgrade will have no baseline to compare against."
     }
 	Write-Output "OpenAEV agent has been successfully installed"
 } catch {
@@ -214,7 +258,8 @@ try {
     $script:installationFailed = $true
 } finally {
     Start-Sleep -Seconds 2
-    if ($staging) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $staging }
+    Save-ReleaseVersion -InstallDirectory "${OPENAEV_INSTALL_DIR}" -Version $releaseVersion
+Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory;
   	if ($location -like "*C:\Windows\System32*") { Set-Location C:\Windows\System32 }
 }
 
