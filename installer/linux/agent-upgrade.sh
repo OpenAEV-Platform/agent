@@ -149,6 +149,9 @@ if [ -d "$openaev_dir" ]; then
 log "01. Downloading OpenAEV Agent into ${install_dir}..."
 # Staged inside the install directory: an unverified binary never sits at
 # the live path, and the final move is a rename on the same filesystem.
+# An upgrade against a directory that is not there is a misconfiguration,
+# not something to paper over by creating it.
+[ -d "${install_dir}" ] || fail_integrity "${install_dir} does not exist, nothing to upgrade"
 workdir=$(mktemp -d "${install_dir}/.openaev-stage-XXXXXX") || fail_integrity "Cannot create a staging directory in ${install_dir}"
 trap 'rm -rf "$workdir"' EXIT INT TERM
 hdr="${workdir}/curl.conf"
