@@ -100,8 +100,10 @@ actual=$(sha256sum "${workdir}/openaev-agent" | cut -d ' ' -f 1)
 [ "$(lower "$expected")" = "$(lower "$actual")" ] || die "Agent binary does not match the release manifest, refusing to install"
 
 log "    Signature and digest verified."
+# Mode set before the rename, so the move publishes a binary that is already
+# complete, verified and executable, in one step.
+run chmod 755 "${workdir}/openaev-agent"
 run mv "${workdir}/openaev-agent" "${install_dir}/openaev-agent"
-run chmod 755 ${install_dir}/openaev-agent
 
 log "04. Creating OpenAEV configuration file"
 cat > ${install_dir}/openaev-agent-config.toml <<EOF || die "Unable to write ${install_dir}/openaev-agent-config.toml"
