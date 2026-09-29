@@ -67,13 +67,16 @@ log "02. Downloading OpenAEV Agent into ${install_dir}..."
 run mkdir -p "${install_dir}"
 [ -w "${install_dir}" ] || die "Can't write to ${install_dir}"
 
-workdir=$(run mktemp -d)
+# Staged inside the install directory, not in /tmp: the final move has to be a
+# rename on the same filesystem to be atomic. Across filesystems mv copies, and
+# a service starting mid-copy would see a partial binary.
+workdir=$(run mktemp -d "${install_dir}/.openaev-install-XXXXXX")
 trap 'rm -rf "$workdir"' EXIT INT TERM
 hdr="${workdir}/curl.conf"
 (umask 077; printf 'header = "Authorization: Bearer %s"\n' "${OPENAEV_TOKEN}" > "$hdr")
 
 # Downloaded out of the way: an unverified binary never sits at the install
-# path, where a later run or a restarting service could pick it up.
+# path itself, where a later run or a restarting service could pick it up.
 run curl -sSfL --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o "${workdir}/openaev-agent"
 
 log "03. Verifying the downloaded binary..."

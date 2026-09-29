@@ -42,6 +42,43 @@ function Test-ManifestSignature
     return $false
 }
 
+function New-ProtectedStagingDirectory
+{
+    [CmdletBinding(SupportsShouldProcess)]
+    param()
+
+    # Staging in the caller's working directory would leave predictable,
+    # user-writable paths: an unprivileged local process could swap the
+    # executable between the digest check and the call, and the verification
+    # would prove nothing. This directory is unguessable and reachable only by
+    # SYSTEM and Administrators.
+    $path = Join-Path -Path $env:ProgramData -ChildPath ("openaev-install-" + [Guid]::NewGuid().ToString('N'))
+    if (-not $PSCmdlet.ShouldProcess($path, 'Create protected staging directory'))
+    {
+        return $null
+    }
+
+    $directory = New-Item -ItemType Directory -Path $path -Force
+
+    $acl = Get-Acl -Path $directory.FullName
+    $acl.SetAccessRuleProtection($true, $false)
+    foreach ($rule in @($acl.Access))
+    {
+        [void]$acl.RemoveAccessRule($rule)
+    }
+    foreach ($account in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators'))
+    {
+        $identity = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $account
+        $sid = $identity.Translate([System.Security.Principal.SecurityIdentifier])
+        $accessRule = New-Object -TypeName System.Security.AccessControl.FileSystemAccessRule -ArgumentList @(
+            $sid, 'FullControl', 'ContainerInherit,ObjectInherit', 'None', 'Allow')
+        $acl.AddAccessRule($accessRule)
+    }
+    Set-Acl -Path $directory.FullName -AclObject $acl
+
+    return $directory.FullName
+}
+
 function Get-ExpectedDigest
 {
     param(
@@ -81,34 +118,50 @@ if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR
 $script:installationFailed = $false
 $headers = @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" }
 $artifact = "agent/package/openaev/windows/${architecture}/service"
+$staging = $null
 
 Write-Output "Downloading and installing OpenAEV Agent..."
 try {
-    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service" -Headers $headers -OutFile "openaev-installer.exe";
-    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/manifest" -Headers $headers -OutFile "openaev-manifest";
-    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/manifest.sig" -Headers $headers -OutFile "openaev-manifest.sig";
+    $staging = New-ProtectedStagingDirectory
+    if (-not $staging)
+    {
+        throw "Could not create a protected staging directory, refusing to install"
+    }
+    $installerPath = Join-Path $staging "openaev-installer.exe"
+    $manifestPath = Join-Path $staging "openaev-manifest"
+    $signaturePath = Join-Path $staging "openaev-manifest.sig"
+
+    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service" -Headers $headers -OutFile $installerPath;
+    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/manifest" -Headers $headers -OutFile $manifestPath;
+    Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/manifest.sig" -Headers $headers -OutFile $signaturePath;
 
     # From here on everything is local. The manifest is only worth what its
     # signature is worth, so that is checked first.
-    if (-not (Test-ManifestSignature -ManifestPath "openaev-manifest" -SignaturePath "openaev-manifest.sig"))
+    if (-not (Test-ManifestSignature -ManifestPath $manifestPath -SignaturePath $signaturePath))
     {
         throw "Release manifest signature is not valid, refusing to install"
     }
 
-    $expected = Get-ExpectedDigest -ManifestPath "openaev-manifest" -Artifact $artifact
+    $expected = Get-ExpectedDigest -ManifestPath $manifestPath -Artifact $artifact
     if ([string]::IsNullOrEmpty($expected))
     {
         throw "No entry for ${artifact} in the release manifest, refusing to install"
     }
 
-    $actual = (Get-FileHash -Path "openaev-installer.exe" -Algorithm SHA256).Hash
+    $actual = (Get-FileHash -Path $installerPath -Algorithm SHA256).Hash
     if ($actual.ToLowerInvariant() -ne $expected.ToLowerInvariant())
     {
         throw "Agent installer does not match the release manifest, refusing to install"
     }
     Write-Output "Signature and digest verified."
 
-    ./openaev-installer.exe /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}"  | Out-Null;
+    & $installerPath /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}"  | Out-Null;
+    # $ErrorActionPreference does not apply to native executables in Windows
+    # PowerShell 5.1, so a failing installer has to be caught explicitly.
+    if ($LASTEXITCODE -ne 0)
+    {
+        throw "Agent installer exited with code ${LASTEXITCODE}"
+    }
 	Write-Output "OpenAEV agent has been successfully installed"
 } catch {
     Write-Output "Installation failed"
@@ -117,7 +170,7 @@ try {
     $script:installationFailed = $true
 } finally {
     Start-Sleep -Seconds 2
-    Remove-Item -Force -ErrorAction SilentlyContinue ./openaev-installer.exe, ./openaev-manifest, ./openaev-manifest.sig;
+    if ($staging) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $staging }
   	if ($location -like "*C:\Windows\System32*") { Set-Location C:\Windows\System32 }
 }
 
