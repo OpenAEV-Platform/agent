@@ -238,7 +238,8 @@ if (-not $stagingDirectory) { throw "Could not create a protected staging direct
 $downloadPath = Join-Path -Path $stagingDirectory -ChildPath "openaev-installer.exe"
 Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service" -Headers @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -OutFile $downloadPath;
 $releaseVersion = Invoke-ReleaseVerification -BaseUrl "${OPENAEV_URL}" -TenantId "${OPENAEV_TENANT_ID}" -Headers @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -StagingDirectory $stagingDirectory -Artifact "agent/package/openaev/windows/${architecture}/service" -FilePath $downloadPath
-Assert-NotADowngrade -InstallDirectory "${OPENAEV_INSTALL_DIR}" -Candidate $releaseVersion & $downloadPath /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}" | Out-Null;
+Assert-NotADowngrade -InstallDirectory "${OPENAEV_INSTALL_DIR}" -Candidate $releaseVersion
+& $downloadPath /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}" | Out-Null;
 }
 else
 {
