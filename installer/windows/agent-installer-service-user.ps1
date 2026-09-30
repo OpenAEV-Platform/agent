@@ -56,11 +56,13 @@ function New-ProtectedStagingDirectory
         [void]$acl.RemoveAccessRule($rule)
     }
 
+    # Well-known SIDs, not names: account names are localized, and on a French
+    # Windows BUILTIN\Administrators does not resolve (it is "Administrateurs").
+    # S-1-5-18 is SYSTEM, S-1-5-32-544 is BUILTIN\Administrators.
     $allowed = @()
-    foreach ($account in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators'))
+    foreach ($wellKnownSid in @('S-1-5-18', 'S-1-5-32-544'))
     {
-        $identity = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $account
-        $allowed += $identity.Translate([System.Security.Principal.SecurityIdentifier])
+        $allowed += New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList $wellKnownSid
     }
     # The identity running this script. The session user flows are not elevated,
     # so leaving it out would lock the caller out of its own staging directory.
@@ -282,6 +284,8 @@ switch ($env:PROCESSOR_ARCHITECTURE)
 }
 if ([string]::IsNullOrEmpty($architecture)) { throw "Architecture $env:PROCESSOR_ARCHITECTURE is not supported yet, please create a ticket in openaev github project" }
 Write-Output "Downloading and installing OpenAEV Agent..."
+# Reset before try: finally deletes whatever this points to.
+$stagingDirectory = $null
 try {
     $stagingDirectory = New-ProtectedStagingDirectory
     if (-not $stagingDirectory) { throw "Could not create a protected staging directory, refusing to continue" }
@@ -299,7 +303,6 @@ try {
     # Only now: recording a release that failed to install would make the next
     # attempt look like a downgrade and block it.
     Save-ReleaseVersion -InstallDirectory "$fullInstallPath" -Version $releaseVersion
-    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory;
     Write-Output "OpenAEV agent has been successfully installed"
 } catch {
     Write-Output "Installation failed"
@@ -308,6 +311,10 @@ try {
     $script:installationFailed = $true
 } finally {
     Start-Sleep -Seconds 2
+    # Here rather than at the end of try, so a download refused by the
+    # verification or an installer that failed does not leave its staging
+    # directory behind in ProgramData.
+    if ($stagingDirectory) { Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory }
   	if ($location -like "*C:\Windows\System32*") { Set-Location C:\Windows\System32 }
 }
 

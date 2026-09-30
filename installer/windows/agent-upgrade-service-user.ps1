@@ -44,11 +44,13 @@ function New-ProtectedStagingDirectory
         [void]$acl.RemoveAccessRule($rule)
     }
 
+    # Well-known SIDs, not names: account names are localized, and on a French
+    # Windows BUILTIN\Administrators does not resolve (it is "Administrateurs").
+    # S-1-5-18 is SYSTEM, S-1-5-32-544 is BUILTIN\Administrators.
     $allowed = @()
-    foreach ($account in @('NT AUTHORITY\SYSTEM', 'BUILTIN\Administrators'))
+    foreach ($wellKnownSid in @('S-1-5-18', 'S-1-5-32-544'))
     {
-        $identity = New-Object -TypeName System.Security.Principal.NTAccount -ArgumentList $account
-        $allowed += $identity.Translate([System.Security.Principal.SecurityIdentifier])
+        $allowed += New-Object -TypeName System.Security.Principal.SecurityIdentifier -ArgumentList $wellKnownSid
     }
     # The identity running this script. The session user flows are not elevated,
     # so leaving it out would lock the caller out of its own staging directory.
@@ -248,16 +250,30 @@ $AgentUpgradedPath = $InstallDir + "\openaev-agent_upgrade.exe";
 
 $stagingDirectory = New-ProtectedStagingDirectory
 if (-not $stagingDirectory) { throw "Could not create a protected staging directory, refusing to continue" }
-$downloadPath = Join-Path -Path $stagingDirectory -ChildPath "openaev-agent_upgrade.exe"
-$releaseVersion = Save-VerifiedArtifact -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/executable/openaev/windows/${architecture}" -RequestHeaders @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -DestinationPath $downloadPath
-Assert-NotADowngrade -InstallDirectory $InstallDir -Candidate $releaseVersion
-Move-Item -Force $downloadPath $AgentUpgradedPath;
+# Cleaned up in finally, so a download refused by the verification or a
+# downgrade does not leave its staging directory behind in ProgramData.
+try
+{
+    $downloadPath = Join-Path -Path $stagingDirectory -ChildPath "openaev-agent_upgrade.exe"
+    $releaseVersion = Save-VerifiedArtifact -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/executable/openaev/windows/${architecture}" -RequestHeaders @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -DestinationPath $downloadPath
+    Assert-NotADowngrade -InstallDirectory $InstallDir -Candidate $releaseVersion
+    Move-Item -Force $downloadPath $AgentUpgradedPath;
 
-sc.exe stop $AgentName;
+    sc.exe stop $AgentName;
 
-Remove-Item -Force $AgentPath;
-Move-Item $AgentUpgradedPath $AgentPath;
-Save-ReleaseVersion -InstallDirectory $InstallDir -Version $releaseVersion
-Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory;
+    Remove-Item -Force $AgentPath;
+    Move-Item $AgentUpgradedPath $AgentPath;
+    Save-ReleaseVersion -InstallDirectory $InstallDir -Version $releaseVersion
+}
+catch
+{
+    # Without a catch, a cmdlet error such as a failed download only ends this
+    # try: the script would carry on after it and exit 0.
+    throw
+}
+finally
+{
+    Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory;
+}
 
 sc.exe start $AgentName;

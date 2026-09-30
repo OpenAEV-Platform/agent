@@ -147,6 +147,10 @@ mv "${workdir}/openaev-agent" "${install_dir}/openaev-agent"
 record_release_version "$install_dir" "$release_version"
 
 echo "03. Creating OpenAEV configuration file"
+# The file holds the token, so it is made owner-only before the token is
+# written: umask covers a new file, chmod one an older install left readable.
+(umask 077; : >> "${install_dir}/openaev-agent-config.toml")
+chmod 600 "${install_dir}/openaev-agent-config.toml"
 cat > ${install_dir}/openaev-agent-config.toml <<EOF
 debug=false
 
