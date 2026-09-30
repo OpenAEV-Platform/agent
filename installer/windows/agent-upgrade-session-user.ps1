@@ -2,18 +2,24 @@
 
 # --- Release integrity ------------------------------------------------------
 # The platform returns a detached signature of the artifact it just served, in a
-# response header. It is checked against the certificate list below, shipped
+# response header. It is checked against the public key list below, shipped
 # inside this script. Nothing here asks the server what to trust, which is the
 # point: an attacker able to serve a tampered binary could serve a tampered
 # reference too.
 #
 # RSA with SHA-256, because Windows PowerShell 5.1 runs on .NET Framework and
-# has no Ed25519. More than one certificate can be listed so a signing key can
-# be rotated without a flag day.
+# has no Ed25519. More than one key can be listed so a signing key can be
+# rotated without a flag day.
+#
+# Each key is installer/agent-implant-signature-public.pem written as
+# RSAKeyValue XML, which RSACryptoServiceProvider imports on both .NET Framework
+# and .NET; neither PEM nor a certificate's PublicKey.Key works on both. To add
+# a key, in PowerShell 7: $k = [Security.Cryptography.RSA]::Create();
+# $k.ImportFromPem((Get-Content key.pem -Raw)); $k.ToXmlString($false)
 $SignatureHeader = 'X-Signature-Sha256-Rsa'
 $VersionHeader = 'X-Release-Version'
-$TrustedReleaseCertificates = @(
-    'PLACEHOLDER_RELEASE_CERTIFICATE_1'
+$TrustedReleaseKeys = @(
+    '<RSAKeyValue><Modulus>ku5It9odazO7lvbj1ph6yd7q3zCr3A7lfjxIGmioBgz+lSLPX5jonnnHE2QCX/vCBZWMRM5EYc/RyVz3a9CBbUYhQp0sPJZJJEWG1IrgE+KlH0T0i/CumsCIpw6J0/E51l2hamWAR54v5xg8bUD9R9kUEDQBCNPo6trJrmVAyZSU+9STZVfLjBPj90eB3BAzg+W0WopJJwk0u2Kn09KSt118xWpRsoPfO/n8AeU5k5swQsDy3gN/gUdG7oEoprB1nYY+aU7KBWzExjWL7etgkjjC1rAUj2duPyug1FIbRKeoMN6S8fCHdD0Xn2sfxFkF3UlfGbR3lmnzGl8qbs0lJQ==</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>'
 )
 
 function New-ProtectedStagingDirectory
@@ -100,22 +106,22 @@ function Test-ArtifactSignature
         [Parameter(Mandatory = $true)][string] $Base64Signature
     )
     $signature = [Convert]::FromBase64String($Base64Signature)
-    foreach ($encoded in $TrustedReleaseCertificates)
+    foreach ($keyXml in $TrustedReleaseKeys)
     {
         try
         {
-            $der = [Convert]::FromBase64String($encoded)
-            $cert = New-Object System.Security.Cryptography.X509Certificates.X509Certificate2(, $der)
-            if ($cert.PublicKey.Key.VerifyData($Content, 'SHA256', $signature))
+            $key = New-Object System.Security.Cryptography.RSACryptoServiceProvider
+            $key.FromXmlString($keyXml)
+            if ($key.VerifyData($Content, 'SHA256', $signature))
             {
                 return $true
             }
         }
         catch
         {
-            # A certificate that will not load, or that did not sign this
-            # artifact, is not an error: the next one may still validate it.
-            Write-Verbose "Release certificate did not validate the artifact: $_"
+            # A key that will not load, or that did not sign this artifact, is
+            # not an error: the next one may still validate it.
+            Write-Verbose "Release key did not validate the artifact: $_"
         }
     }
     return $false
