@@ -15,11 +15,10 @@ $script:installationFailed = $false
 # has no Ed25519. More than one key can be listed so a signing key can be
 # rotated without a flag day.
 #
-# Each key is installer/agent-implant-signature-public.pem written as
-# RSAKeyValue XML, which RSACryptoServiceProvider imports on both .NET Framework
-# and .NET; neither PEM nor a certificate's PublicKey.Key works on both. To add
-# a key, in PowerShell 7: $k = [Security.Cryptography.RSA]::Create();
-# $k.ImportFromPem((Get-Content key.pem -Raw)); $k.ToXmlString($false)
+# Each key is the public key the Linux and macOS scripts embed as PEM, written
+# as RSAKeyValue XML: RSACryptoServiceProvider imports that on both .NET
+# Framework and .NET, while neither PEM nor a certificate's PublicKey.Key works
+# on both.
 $SignatureHeader = 'X-Signature-Sha256-Rsa'
 $VersionHeader = 'X-Release-Version'
 $TrustedReleaseKeys = @(
