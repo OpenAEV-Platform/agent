@@ -144,18 +144,19 @@ function Save-VerifiedArtifact
         [Parameter(Mandatory = $true)][string] $DestinationPath
     )
     $response = Invoke-WebRequest -Uri $Uri -Headers $RequestHeaders -UseBasicParsing
+    $content = $response.RawContentStream.ToArray()
 
     $signature = Get-HeaderValue -ResponseHeaders $response.Headers -Name $SignatureHeader
     if ([string]::IsNullOrEmpty($signature))
     {
         throw "The server returned no signature for this artifact, refusing to continue"
     }
-    if (-not (Test-ArtifactSignature -Content $response.Content -Base64Signature $signature))
+    if (-not (Test-ArtifactSignature -Content $content -Base64Signature $signature))
     {
         throw "Signature does not match any trusted release key, refusing to continue"
     }
 
-    [IO.File]::WriteAllBytes($DestinationPath, $response.Content)
+    [IO.File]::WriteAllBytes($DestinationPath, $content)
     return (Get-HeaderValue -ResponseHeaders $response.Headers -Name $VersionHeader)
 }
 
@@ -201,12 +202,21 @@ function Save-ReleaseVersion
     if ([string]::IsNullOrEmpty($Version)) { return }
     # Guarded: failing to record the version must not report a successful
     # install as failed. The upgrade path treats a missing file as "no baseline".
-    if ([string]::IsNullOrEmpty($InstallDirectory) -or (-not (Test-Path -Path $InstallDirectory)))
+    # Caught here, not left to the caller: a failed write is a terminating error
+    # whatever $ErrorActionPreference says, and the caller's catch would turn it
+    # into a failed install.
+    try
+    {
+        if ([string]::IsNullOrEmpty($InstallDirectory) -or (-not (Test-Path -Path $InstallDirectory)))
+        {
+            throw "The install directory does not exist"
+        }
+        Set-Content -Path (Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version") -Value $Version -NoNewline -ErrorAction Stop
+    }
+    catch
     {
         Write-Output "Could not record the installed version, the next upgrade will have no baseline to compare against."
-        return
     }
-    Set-Content -Path (Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version") -Value $Version -NoNewline
 }
 # ----------------------------------------------------------------------------
 # Can't install the OpenAEV agent in System32 location because NSIS 64 exe

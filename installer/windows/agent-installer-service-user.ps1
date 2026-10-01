@@ -152,18 +152,19 @@ function Save-VerifiedArtifact
         [Parameter(Mandatory = $true)][string] $DestinationPath
     )
     $response = Invoke-WebRequest -Uri $Uri -Headers $RequestHeaders -UseBasicParsing
+    $content = $response.RawContentStream.ToArray()
 
     $signature = Get-HeaderValue -ResponseHeaders $response.Headers -Name $SignatureHeader
     if ([string]::IsNullOrEmpty($signature))
     {
         throw "The server returned no signature for this artifact, refusing to continue"
     }
-    if (-not (Test-ArtifactSignature -Content $response.Content -Base64Signature $signature))
+    if (-not (Test-ArtifactSignature -Content $content -Base64Signature $signature))
     {
         throw "Signature does not match any trusted release key, refusing to continue"
     }
 
-    [IO.File]::WriteAllBytes($DestinationPath, $response.Content)
+    [IO.File]::WriteAllBytes($DestinationPath, $content)
     return (Get-HeaderValue -ResponseHeaders $response.Headers -Name $VersionHeader)
 }
 
@@ -209,12 +210,21 @@ function Save-ReleaseVersion
     if ([string]::IsNullOrEmpty($Version)) { return }
     # Guarded: failing to record the version must not report a successful
     # install as failed. The upgrade path treats a missing file as "no baseline".
-    if ([string]::IsNullOrEmpty($InstallDirectory) -or (-not (Test-Path -Path $InstallDirectory)))
+    # Caught here, not left to the caller: a failed write is a terminating error
+    # whatever $ErrorActionPreference says, and the caller's catch would turn it
+    # into a failed install.
+    try
+    {
+        if ([string]::IsNullOrEmpty($InstallDirectory) -or (-not (Test-Path -Path $InstallDirectory)))
+        {
+            throw "The install directory does not exist"
+        }
+        Set-Content -Path (Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version") -Value $Version -NoNewline -ErrorAction Stop
+    }
+    catch
     {
         Write-Output "Could not record the installed version, the next upgrade will have no baseline to compare against."
-        return
     }
-    Set-Content -Path (Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version") -Value $Version -NoNewline
 }
 # ----------------------------------------------------------------------------
 $isElevatedPowershell = ([Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
@@ -267,6 +277,22 @@ $fullInstallPath = Join-Path $profilePath $installDir
 
 Write-Output "Resolved installation path: $fullInstallPath"
 
+function ConvertTo-SafeUserName {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$UserName
+    )
+    $UserName = $UserName.ToLower()
+    $pattern = '[\/\\:\*\?<>\|]'
+    return ($UserName -replace $pattern, '')
+}
+
+# The NSIS installer does not install into $fullInstallPath itself but into a
+# per-user directory under it (updateDirAndServiceName), the one
+# agent-upgrade-service-user.ps1 reads the installed version from. Same name and
+# sanitization as both, or the first upgrade finds no baseline.
+$agentDirectory = Join-Path $fullInstallPath ("${OPENAEV_SERVICE_NAME}-" + (ConvertTo-SafeUserName -UserName $User))
+
 # Can't install the OpenAEV agent in System32 location because NSIS 64 exe
 $location = Get-Location
 if ($location -like "*C:\Windows\System32*") { Set-Location C:\ }
@@ -302,7 +328,7 @@ try {
     }
     # Only now: recording a release that failed to install would make the next
     # attempt look like a downgrade and block it.
-    Save-ReleaseVersion -InstallDirectory "$fullInstallPath" -Version $releaseVersion
+    Save-ReleaseVersion -InstallDirectory "$agentDirectory" -Version $releaseVersion
     Write-Output "OpenAEV agent has been successfully installed"
 } catch {
     Write-Output "Installation failed"

@@ -140,18 +140,19 @@ function Save-VerifiedArtifact
         [Parameter(Mandatory = $true)][string] $DestinationPath
     )
     $response = Invoke-WebRequest -Uri $Uri -Headers $RequestHeaders -UseBasicParsing
+    $content = $response.RawContentStream.ToArray()
 
     $signature = Get-HeaderValue -ResponseHeaders $response.Headers -Name $SignatureHeader
     if ([string]::IsNullOrEmpty($signature))
     {
         throw "The server returned no signature for this artifact, refusing to continue"
     }
-    if (-not (Test-ArtifactSignature -Content $response.Content -Base64Signature $signature))
+    if (-not (Test-ArtifactSignature -Content $content -Base64Signature $signature))
     {
         throw "Signature does not match any trusted release key, refusing to continue"
     }
 
-    [IO.File]::WriteAllBytes($DestinationPath, $response.Content)
+    [IO.File]::WriteAllBytes($DestinationPath, $content)
     return (Get-HeaderValue -ResponseHeaders $response.Headers -Name $VersionHeader)
 }
 
@@ -197,12 +198,21 @@ function Save-ReleaseVersion
     if ([string]::IsNullOrEmpty($Version)) { return }
     # Guarded: failing to record the version must not report a successful
     # install as failed. The upgrade path treats a missing file as "no baseline".
-    if ([string]::IsNullOrEmpty($InstallDirectory) -or (-not (Test-Path -Path $InstallDirectory)))
+    # Caught here, not left to the caller: a failed write is a terminating error
+    # whatever $ErrorActionPreference says, and the caller's catch would turn it
+    # into a failed install.
+    try
+    {
+        if ([string]::IsNullOrEmpty($InstallDirectory) -or (-not (Test-Path -Path $InstallDirectory)))
+        {
+            throw "The install directory does not exist"
+        }
+        Set-Content -Path (Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version") -Value $Version -NoNewline -ErrorAction Stop
+    }
+    catch
     {
         Write-Output "Could not record the installed version, the next upgrade will have no baseline to compare against."
-        return
     }
-    Set-Content -Path (Join-Path -Path $InstallDirectory -ChildPath "openaev-agent.version") -Value $Version -NoNewline
 }
 # ----------------------------------------------------------------------------
 switch ($env:PROCESSOR_ARCHITECTURE)
@@ -247,23 +257,49 @@ if ($BasePath -match "\\$ServiceName-[^\\]+$" -or $BasePath -match "/$ServiceNam
 
 $AgentPath = $InstallDir + "\openaev-agent.exe";
 $AgentUpgradedPath = $InstallDir + "\openaev-agent_upgrade.exe";
+$AgentPreviousPath = $InstallDir + "\openaev-agent_previous.exe";
 
 $stagingDirectory = New-ProtectedStagingDirectory
 if (-not $stagingDirectory) { throw "Could not create a protected staging directory, refusing to continue" }
 # Cleaned up in finally, so a download refused by the verification or a
 # downgrade does not leave its staging directory behind in ProgramData.
+$restartService = $false
 try
 {
     $downloadPath = Join-Path -Path $stagingDirectory -ChildPath "openaev-agent_upgrade.exe"
     $releaseVersion = Save-VerifiedArtifact -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/executable/openaev/windows/${architecture}" -RequestHeaders @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -DestinationPath $downloadPath
     Assert-NotADowngrade -InstallDirectory $InstallDir -Candidate $releaseVersion
-    Move-Item -Force $downloadPath $AgentUpgradedPath;
+    # Every file operation up to the baseline is terminating: this script does
+    # not set $ErrorActionPreference, so a failure would only be reported and
+    # the release recorded anyway, blocking the next attempt as a downgrade
+    # while the old binary still runs. If this first move failed, the one below
+    # would also install whatever stale, unverified openaev-agent_upgrade.exe
+    # an earlier attempt left behind.
+    Move-Item -Force $downloadPath $AgentUpgradedPath -ErrorAction Stop;
 
     sc.exe stop $AgentName;
+    $restartService = $true
+    # sc.exe only asks the service to stop. Until it is Stopped and its process
+    # has exited, the binary is still in use and the restart below would find
+    # the service still running.
+    (Get-Service -Name $AgentName -ErrorAction Stop).WaitForStatus('Stopped', [TimeSpan]::FromSeconds(60))
+    Get-Process | Where-Object { $_.Path -eq $AgentPath } | Wait-Process -Timeout 60 -ErrorAction Stop
 
-    Remove-Item -Force $AgentPath;
-    Move-Item $AgentUpgradedPath $AgentPath;
+    # Set aside rather than deleted, so a replacement that fails can put it back
+    # for the restart in finally. -Force replaces one left by an earlier attempt.
+    Move-Item -Force $AgentPath $AgentPreviousPath -ErrorAction Stop;
+    try
+    {
+        Move-Item $AgentUpgradedPath $AgentPath -ErrorAction Stop;
+    }
+    catch
+    {
+        Move-Item $AgentPreviousPath $AgentPath -ErrorAction Continue;
+        throw
+    }
     Save-ReleaseVersion -InstallDirectory $InstallDir -Version $releaseVersion
+    # Best effort: one left behind is replaced by the next upgrade.
+    Remove-Item -Force $AgentPreviousPath -ErrorAction SilentlyContinue;
 }
 catch
 {
@@ -274,6 +310,7 @@ catch
 finally
 {
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue $stagingDirectory;
+    # In finally, so an upgrade that failed after the stop does not leave the
+    # agent stopped: by then the previous binary is still, or again, in place.
+    if ($restartService) { sc.exe start $AgentName; }
 }
-
-sc.exe start $AgentName;
