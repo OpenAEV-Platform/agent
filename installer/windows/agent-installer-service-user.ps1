@@ -317,6 +317,7 @@ try {
     if (-not $stagingDirectory) { throw "Could not create a protected staging directory, refusing to continue" }
     $downloadPath = Join-Path -Path $stagingDirectory -ChildPath "agent-installer-service-user.exe"
     $releaseVersion = Save-VerifiedArtifact -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service-user" -RequestHeaders @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -DestinationPath $downloadPath
+    Assert-NotADowngrade -InstallDirectory "$agentDirectory" -Candidate $releaseVersion
 
     # Use the resolved full installation path
     & $downloadPath /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="$fullInstallPath" ~TENANT_ID="${OPENAEV_TENANT_ID}" ~USER="$User" ~PASSWORD="$Password" | Out-Null;

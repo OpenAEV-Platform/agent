@@ -149,6 +149,7 @@ run curl -sSfL --config "$hdr" -D "${workdir}/headers" ${base_url}/api/tenants/$
 
 verify_release_artifact "$workdir" "${workdir}/headers" "${workdir}/openaev-agent"
 release_version=$(header_value "${workdir}/headers" "$VERSION_HEADER")
+assert_not_a_downgrade "$install_dir" "$release_version"
 
 # Mode set before the rename, so the move publishes a binary that is already
 # complete, verified and executable, in one step.

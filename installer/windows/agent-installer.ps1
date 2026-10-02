@@ -246,6 +246,7 @@ try {
     if (-not $stagingDirectory) { throw "Could not create a protected staging directory, refusing to continue" }
     $downloadPath = Join-Path -Path $stagingDirectory -ChildPath "openaev-installer.exe"
     $releaseVersion = Save-VerifiedArtifact -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service" -RequestHeaders @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -DestinationPath $downloadPath
+    Assert-NotADowngrade -InstallDirectory "${OPENAEV_INSTALL_DIR}" -Candidate $releaseVersion
 
     & $downloadPath /S ~OPENAEV_URL="${OPENAEV_URL}" ~ACCESS_TOKEN="${OPENAEV_TOKEN}" ~UNSECURED_CERTIFICATE=${OPENAEV_UNSECURED_CERTIFICATE} ~WITH_PROXY=${OPENAEV_WITH_PROXY} ~SERVICE_NAME="${OPENAEV_SERVICE_NAME}" ~INSTALL_DIR="${OPENAEV_INSTALL_DIR}" ~TENANT_ID="${OPENAEV_TENANT_ID}"  | Out-Null;
     # $ErrorActionPreference does not apply to native executables in Windows
