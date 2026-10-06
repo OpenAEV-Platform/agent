@@ -118,6 +118,19 @@ jobs:
         shell: pwsh
         run: ./installer/windows/Run-Lint.ps1
 
+      # Customers run the installers under Windows PowerShell 5.1, CI defaults
+      # to PowerShell 7, and the two do not use the same crypto stack. An
+      # embedded key has to be importable on both.
+      - name: Check release keys (Windows PowerShell 5.1)
+        if: matrix.os == 'windows'
+        shell: powershell
+        run: ./installer/windows/Test-ReleaseKeys.ps1
+
+      - name: Check release keys (PowerShell 7)
+        if: matrix.os == 'windows'
+        shell: pwsh
+        run: ./installer/windows/Test-ReleaseKeys.ps1
+
   # ──────────────────────────────────────────────────────────────────
   # Run the test suite on every (os, arch) target. This is the
   # cross-platform correctness gate; `coverage` measures line coverage
