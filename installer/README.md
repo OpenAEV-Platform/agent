@@ -17,7 +17,7 @@ check yourself before approving a release for your estate.
 Its SHA-256 fingerprint, over the DER encoding, is:
 
 ```
-4d8758a51ec562aecf4cc9334e99e908618180c2817de4883b0d4e4d82f89286
+48ffe0d81d2a7d6747d8815e7117b686e49774d47cc4f8e85505243f3b5f8aa2
 ```
 
 Pin that fingerprint once, then trust the file. Recompute it at any time with:
