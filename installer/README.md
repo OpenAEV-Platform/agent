@@ -10,6 +10,10 @@ OpenAEV release key. The installer and upgrade scripts check that signature
 before anything runs, using the public key they embed. You can run the same
 check yourself before approving a release for your estate.
 
+On Linux and macOS the scripts need `openssl` on the PATH, and stop with a
+clear message when it is missing. The Windows scripts need nothing extra, they
+verify through .NET.
+
 ### The release public key
 
 [`keys/openaev-release-1.pem`](keys/openaev-release-1.pem)

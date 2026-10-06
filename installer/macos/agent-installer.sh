@@ -67,6 +67,9 @@ verify_release_artifact() {
   _headers="$2"
   _file="$3"
 
+  command -v openssl >/dev/null 2>&1 \
+    || fail_integrity "openssl is required to verify this artifact, install it and run this script again"
+
   _signature=$(header_value "$_headers" "$SIGNATURE_HEADER")
   [ -n "$_signature" ] || fail_integrity "The server returned no signature for this artifact, refusing to continue"
 
