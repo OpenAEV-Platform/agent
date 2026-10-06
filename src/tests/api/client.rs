@@ -69,36 +69,34 @@ mod tests {
         let res_with_unsecured_certificate = client_with_unsecured_certificate.get("").send();
 
         // -- ASSERT --
-        assert!(
-            res_without_unsecured_certificate.is_err(),
-            "Client should not bypass the bad ssl"
-        );
-
-        if res_with_unsecured_certificate.is_err() {
-            return;
+        match (
+            res_without_unsecured_certificate,
+            res_with_unsecured_certificate,
+        ) {
+            // the unsecured client still completes the handshake, so its failure means the host is down
+            (_, Err(err)) => eprintln!("skipped, {bad_ssl_url} is unreachable: {err}"),
+            (Err(_), Ok(_)) => {}
+            (Ok(_), Ok(_)) => panic!("Client should not bypass the bad ssl"),
         }
-
-        assert!(
-            res_with_unsecured_certificate.is_ok(),
-            "Client should bypass the bad ssl"
-        );
     }
 
     #[test]
     fn test_valid_certificate_is_accepted() {
         // -- PREPARE --
-        let client = Client::new(
-            "https://sha256.badssl.com/".to_string(),
-            TOKEN.to_string(),
-            false,
-            false,
-        );
+        let valid_ssl_url = "https://sha256.badssl.com/";
+        let client = Client::new(valid_ssl_url.to_string(), TOKEN.to_string(), false, false);
+        let reachability_probe =
+            Client::new(valid_ssl_url.to_string(), TOKEN.to_string(), true, false);
 
         // -- EXECUTE & ASSERT --
-        assert!(
-            client.get("").send().is_ok(),
-            "Client should trust a publicly valid certificate"
-        );
+        let Err(err) = client.get("").send() else {
+            return;
+        };
+        // the probe skips chain validation, so its own failure means the host is down
+        match reachability_probe.get("").send() {
+            Ok(_) => panic!("Client should trust a publicly valid certificate: {err}"),
+            Err(probe_err) => eprintln!("skipped, {valid_ssl_url} is unreachable: {probe_err}"),
+        }
     }
 
     #[test]
