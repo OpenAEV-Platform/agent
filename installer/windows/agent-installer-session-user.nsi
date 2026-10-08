@@ -59,6 +59,7 @@ Var /GLOBAL ConfigInstallDir
 Var /GLOBAL ConfigWithAdminPrivilege
 Var /GLOBAL UserSanitized
 Var /GLOBAL AgentName
+Var /GLOBAL UserSID
 
 function verifyParam
 
@@ -467,7 +468,36 @@ section "install"
   # Files added here should be removed by the uninstaller (see section "uninstall")
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
-	
+
+  ; Retrieve the SID of the user running this installer (the agent runs as this user)
+  nsExec::ExecToStack "powershell.exe -NoProfile -WindowStyle Hidden -Command [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value"
+  Pop $R0    ; Pop the exit code
+  Pop $UserSID  ; Pop the SID string
+
+  ;remove newline and whitespace from the UserSID
+  Push $UserSID
+  Call Trim
+  Pop $UserSID
+
+  StrCpy $R1 $UserSID 4
+  ${If} $R1 != "S-1-"
+    Abort "Unable to resolve the SID of the current user"
+  ${EndIf}
+
+  ; The config holds the token. Without an explicit ACL it inherits the folder's,
+  ; which lets every local user read it. Restrict it to SYSTEM, Administrators and
+  ; the current user while it is still empty, so the token never sits in a readable
+  ; file. Overwriting the file later keeps this ACL. The user keeps full control: the
+  ; session-user upgrade reruns this installer as that user and rewrites the file.
+  ; Well-known SIDs, not names: account names are localized.
+  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
+  FileClose $4
+  nsExec::ExecToLog 'icacls "$INSTDIR\openaev-agent-config.toml" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F *$UserSID:F'
+  Pop $0
+  ${If} $0 != 0
+    Abort "Unable to restrict access to $INSTDIR\openaev-agent-config.toml (icacls exit code $0)"
+  ${EndIf}
+
   ; write agent config file
   FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
     FileWrite $4 "debug=false$\r$\n"
