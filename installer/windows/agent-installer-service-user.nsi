@@ -64,6 +64,7 @@ Var /GLOBAL ConfigPassword
 Var /GLOBAL DisplayName
 Var /GLOBAL ServiceName
 Var UserSID
+Var UserSidType
 Var Perm
 
 Function verifyParam
@@ -450,6 +451,28 @@ section "install"
   # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
   setOutPath $INSTDIR
 
+  ; Retrieve the SID for $ConfigUser
+  ; (needed both for the config ACL below and for the service permissions)
+  ; Before stopping the existing service: an abort here must leave a working
+  ; installation in place.
+  Push $ConfigUser
+  Call ResolveAccountSid
+  Pop $UserSID
+
+  StrCpy $R1 $UserSID 4
+  ${If} $R1 != "S-1-"
+    Abort "Unable to resolve the SID of $ConfigUser"
+  ${EndIf}
+
+  ; The lookup also resolves groups and aliases (e.g. BUILTIN\Users): the service
+  ; cannot run as one, and granting it read access would expose the token to every
+  ; member. Only user accounts are supported: the service is created with a
+  ; password, which virtual accounts (NT SERVICE\...), managed service accounts and
+  ; the built-in service accounts do not take.
+  ${If} $UserSidType != 1 ; SidTypeUser
+    Abort "$ConfigUser is not a user account (SID_NAME_USE $UserSidType)"
+  ${EndIf}
+
   ;stopping existing service
   ExecWait 'sc stop $ServiceName' $0
 
@@ -461,7 +484,33 @@ section "install"
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
 
-  ; write agent config file
+  ; The config holds the token. Without an explicit ACL it inherits the folder's,
+  ; which lets every local user read it. Restrict it to SYSTEM, Administrators and
+  ; read access for the service account while it is still empty, so the token never
+  ; sits in a readable file. Overwriting the file later keeps this ACL. Well-known
+  ; SIDs, not names: account names are localized. icacls by full path: a bare
+  ; name is looked up in the installer's folder first.
+  ; Delete the previous config first: icacls only replaces the entries it names, so
+  ; any other entry (and the owner) of an existing file would survive a reinstall.
+  ClearErrors
+  Delete "$INSTDIR\openaev-agent-config.toml"
+  ${If} ${Errors}
+    Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+  ClearErrors
+  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
+  FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+  nsExec::ExecToLog '"$SYSDIR\icacls.exe" "$INSTDIR\openaev-agent-config.toml" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F *$UserSID:R'
+  Pop $0
+  ${If} $0 != 0
+    Abort "Unable to restrict access to $INSTDIR\openaev-agent-config.toml (icacls exit code $0)"
+  ${EndIf}
+
+  ; write agent config file (FileOpen and FileWrite only set the error flag on failure)
+  ClearErrors
   FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "$\r$\n"
@@ -476,6 +525,9 @@ section "install"
     FileWrite $4 "tenant_id = $\"$ConfigTenantId$\"$\r$\n"
     FileWrite $4 "$\r$\n" ; newline
   FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
 
   ; register windows service
   ExecWait 'sc create $ServiceName error="severe" displayname="$DisplayName" obj="$ConfigUser" password="$ConfigPassword" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"' $R0
@@ -483,17 +535,7 @@ section "install"
   ; configure restart in case of failure
   ExecWait 'sc failure $ServiceName reset= 0 actions= restart/60000/restart/60000/restart/60000'
 
-  ;------ Add the permissions to start/stop service for the user
-
-  ; Retrieve the SID for $ConfigUser using PowerShell
-  nsExec::ExecToStack "powershell.exe -NoProfile -WindowStyle Hidden -Command (New-Object System.Security.Principal.NTAccount('$ConfigUser')).Translate([System.Security.Principal.SecurityIdentifier]).Value"
-  Pop $R0    ; Pop the exit code
-  Pop $UserSID  ; Pop the SID string
-
-  ;remove newline and whitespace from the UserSID
-  Push $UserSID
-  Call Trim
-  Pop $UserSID
+  ;------ Add the permissions to start/stop service for the user ($UserSID retrieved above)
 
   ; Get Existing permission and Add permission for the user to stop/start the service
   nsExec::ExecToStack "cmd /c sc sdshow $ServiceName"
@@ -644,6 +686,58 @@ section "uninstall"
   ; delete everything
   RMDir /r $INSTDIR
 sectionEnd
+
+; ResolveAccountSid
+;   Returns the SID ("S-1-...") of an account name, or "" if it cannot be resolved,
+;   and sets $UserSidType to its SID_NAME_USE (1 = user, 0 if not resolved).
+;   Calls the Windows API rather than PowerShell, which AppLocker or Constrained
+;   Language Mode can block, and which a quote in the name breaks.
+; Usage:
+;   Push <account>
+;   Call ResolveAccountSid
+;   Pop <sid>
+Function ResolveAccountSid
+  Exch $0 ; Account name
+  Push $1
+  Push $2
+  Push $3
+  StrCpy $UserSidType 0
+
+  ; An empty name would resolve to the BUILTIN domain
+  ${If} $0 == ""
+    Goto Done
+  ${EndIf}
+
+  ; sc.exe takes ".\name" for a local account; the lookup needs "COMPUTER\name"
+  StrCpy $1 $0 2
+  ${If} $1 == ".\"
+    ReadEnvStr $1 COMPUTERNAME
+    StrCpy $0 $0 "" 2
+    StrCpy $0 "$1\$0"
+  ${EndIf}
+
+  System::Alloc 68 ; SECURITY_MAX_SID_SIZE
+  Pop $1
+  System::Call 'advapi32::LookupAccountNameW(p 0, w r0, p r1, *i 68, w .r2, *i ${NSIS_MAX_STRLEN}, *i .s) i .r3'
+  Pop $UserSidType
+  StrCpy $0 ""
+  ${If} $3 == 0
+    StrCpy $UserSidType 0
+  ${Else}
+    System::Call 'advapi32::ConvertSidToStringSidW(p r1, *p .r2) i .r3'
+    ${If} $3 != 0
+      System::Call 'kernel32::lstrcpynW(w .r0, p r2, i ${NSIS_MAX_STRLEN})'
+      System::Call 'kernel32::LocalFree(p r2)'
+    ${EndIf}
+  ${EndIf}
+  System::Free $1
+
+  Done:
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
 
 ; Trim
 ;   Removes leading & trailing whitespace from a string

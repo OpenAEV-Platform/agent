@@ -371,7 +371,33 @@ section "install"
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
   
-  ; write agent config file
+  ; The config holds the token. Without an explicit ACL it inherits the folder's,
+  ; which lets every local user read it. Restrict it to SYSTEM (the service account)
+  ; and Administrators while it is still empty, so the token never sits in a
+  ; readable file. Overwriting the file later keeps this ACL. Well-known SIDs, not
+  ; names: account names are localized. icacls by full path: a bare name is looked
+  ; up in the installer's folder first.
+  ; Delete the previous config first: icacls only replaces the entries it names, so
+  ; any other entry (and the owner) of an existing file would survive a reinstall.
+  ClearErrors
+  Delete "$INSTDIR\openaev-agent-config.toml"
+  ${If} ${Errors}
+    Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+  ClearErrors
+  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
+  FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+  nsExec::ExecToLog '"$SYSDIR\icacls.exe" "$INSTDIR\openaev-agent-config.toml" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F'
+  Pop $0
+  ${If} $0 != 0
+    Abort "Unable to restrict access to $INSTDIR\openaev-agent-config.toml (icacls exit code $0)"
+  ${EndIf}
+
+  ; write agent config file (FileOpen and FileWrite only set the error flag on failure)
+  ClearErrors
   FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "[openaev]$\r$\n"
@@ -385,6 +411,9 @@ section "install"
     FileWrite $4 "tenant_id = $\"$ConfigTenantId$\"$\r$\n"
     FileWrite $4 "$\r$\n" ; newline
   FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
 
   ; register windows service
   ExecWait 'sc create $ServiceName error="severe" displayname="${displayName}" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"'
