@@ -1,13 +1,13 @@
 name: "[Agent] Auto-Retry Failed CI"
 
-# Triggers when the CI or OS trust store workflow completes with failure.
+# Triggers when the CI workflow completes with failure.
 # Retries failed jobs up to twice, so back-to-back infra flakes are still covered.
 
 on:
   workflow_run:
     # Workflow names are glob patterns, so literal brackets must be escaped.
     # https://github.com/github/docs/issues/12572#issuecomment-1014035978
-    workflows: ['\[Agent\] CI', '\[Agent\] OS trust store']
+    workflows: ['\[Agent\] CI']
     types: [completed]
 
 permissions:
@@ -30,7 +30,7 @@ jobs:
         run: |
           RUN_ID="${{ github.event.workflow_run.id }}"
           ATTEMPT="${{ github.event.workflow_run.run_attempt }}"
-          echo "🔄 ${{ github.event.workflow_run.name }} run #${RUN_ID} failed on attempt ${ATTEMPT} — retrying failed jobs..."
+          echo "🔄 [Agent] CI run #${RUN_ID} failed on attempt ${ATTEMPT} — retrying failed jobs..."
           gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/rerun-failed-jobs" \
             --method POST
           echo "✅ Re-run triggered (attempt $((ATTEMPT + 1)))"
