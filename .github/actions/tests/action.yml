@@ -1,0 +1,31 @@
+name: Tests
+description: "Run the test suite for one target"
+
+inputs:
+  os:
+    description: "Runner OS family: ubuntu, windows or macos"
+    required: true
+  arch:
+    description: "Architecture: x86_64 or arm64"
+    required: true
+  target:
+    description: "Rust target triple to test"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install musl-tools
+      if: inputs.os == 'ubuntu' && contains(inputs.target, 'musl')
+      run: sudo apt-get update && sudo apt-get install -y musl-tools
+      shell: bash
+
+    - name: Set up Rust and cache
+      uses: ./.github/actions/setup-rust
+      with:
+        cache-key: tests-${{ inputs.arch }}
+        targets: ${{ inputs.target }}
+
+    - name: Run cargo test
+      run: cargo test --target=${{ inputs.target }} --locked
+      shell: bash

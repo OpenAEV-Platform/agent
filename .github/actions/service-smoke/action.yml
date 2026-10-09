@@ -1,0 +1,32 @@
+name: Service smoke
+description: "Install the last release as a service, upgrade it to this build and launch an implant, against a mock platform"
+
+inputs:
+  os:
+    description: "Runner OS family: ubuntu, windows or macos"
+    required: true
+  arch:
+    description: "Architecture: x86_64 or arm64"
+    required: true
+  jfrog_path:
+    description: "Artifact folder of the build (e.g. linux/x86_64)"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v7
+      with:
+        python-version: "3.x"
+
+    - name: Download binary artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: agent-bin-${{ inputs.os }}-${{ inputs.arch }}
+        path: smoke
+
+    # Bash puts Git's openssl on PATH on Windows too; the mock signs with it.
+    - name: Install, upgrade to this build and launch an implant
+      shell: bash
+      run: python .github/scripts/agent-service-smoke.py smoke/${{ inputs.jfrog_path }}

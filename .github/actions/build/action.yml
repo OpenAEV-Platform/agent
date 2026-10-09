@@ -1,0 +1,146 @@
+name: Build
+description: "Build the release agent (and the Windows installers) for one target and upload it as an artifact"
+
+inputs:
+  os:
+    description: "Runner OS family: ubuntu, windows or macos"
+    required: true
+  arch:
+    description: "Architecture: x86_64 or arm64"
+    required: true
+  target:
+    description: "Rust target triple to build"
+    required: true
+  jfrog_path:
+    description: "Artifact folder, matching the JFrog layout (e.g. linux/x86_64)"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install musl-tools
+      if: inputs.os == 'ubuntu' && contains(inputs.target, 'musl')
+      run: sudo apt-get update && sudo apt-get install -y musl-tools
+      shell: bash
+
+    - name: Install NSIS (Windows)
+      if: inputs.os == 'windows'
+      run: choco install -y nsis
+      shell: pwsh
+
+    - name: Set up Rust and cache
+      uses: ./.github/actions/setup-rust
+      with:
+        cache-key: build-${{ inputs.arch }}
+        targets: ${{ inputs.target }}
+
+    - name: Build (release)
+      run: |
+        # Static CRT linkage for Windows is configured in .cargo/config.toml
+        # (target-feature=+crt-static) so VCRUNTIME140.dll is not required at
+        # runtime.
+        #
+        # IMPORTANT: We must NOT set RUSTFLAGS here because it would *override*
+        # (not combine with) the target-specific rustflags in .cargo/config.toml,
+        # effectively dropping +crt-static.  This was the root cause of the
+        # VCRUNTIME140.dll missing error on Windows ARM64.
+        cargo build --target=${{ inputs.target }} --release --locked
+      shell: bash
+
+    - name: Verify no dynamic CRT dependency (Windows)
+      if: inputs.os == 'windows'
+      shell: bash
+      run: |
+        BIN="./target/${{ inputs.target }}/release/openaev-agent.exe"
+        echo "Checking $BIN for VCRUNTIME imports…"
+        # rustup includes llvm-objdump; use it instead of dumpbin which
+        # may not be on PATH (especially on windows-11-arm runners).
+        if rustup run stable llvm-objdump --private-headers "$BIN" \
+           | grep -qi "vcruntime"; then
+          echo "::error::Binary still dynamically links to VCRUNTIME:"
+          rustup run stable llvm-objdump --private-headers "$BIN" | grep -i "vcruntime"
+          exit 1
+        fi
+        echo "✅ No VCRUNTIME dependency found — static CRT linkage confirmed."
+
+    - name: Build agent installers with NSIS (Windows)
+      if: inputs.os == 'windows'
+      shell: pwsh
+      run: |
+        # The .nsi files reference ..\..\target\release\openaev-agent.exe (the
+        # default unflavored release dir). Because we build with --target=...,
+        # the binary actually lives in target/<triple>/release/. Copy it to the
+        # legacy path so makensis can find it.
+        New-Item -ItemType Directory -Force -Path "./target/release" | Out-Null
+        Copy-Item -Force `
+          "./target/${{ inputs.target }}/release/openaev-agent.exe" `
+          "./target/release/openaev-agent.exe"
+
+        $installers = @(
+          "agent-installer.nsi",
+          "agent-installer-service-user.nsi",
+          "agent-installer-session-user.nsi"
+        )
+        foreach ($nsi in $installers) {
+          & "C:\Program Files (x86)\NSIS\Bin\makensis.exe" "./installer/windows/$nsi"
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host "makensis failed for $nsi with exit code $LASTEXITCODE"
+            exit 1
+          }
+        }
+
+    - name: Install cargo cache
+      run: |
+        if command -v cargo-cache &>/dev/null; then
+          echo "cargo-cache already installed."
+        else
+          cargo install cargo-cache --locked
+        fi
+      shell: bash
+
+    - name: Run cargo cache
+      run: cargo cache -a -l || true
+      shell: bash
+
+    # ──────────────────────────────────────────────────────────────
+    # Stage artifacts for downstream promotion.
+    #
+    # Each matrix job uploads a flat directory layout matching the
+    # JFrog destination paths so the downstream workflow only needs
+    # to append the version suffix and PUT each file.
+    #
+    # Layout for the per-target artifact (agent-bin-<os>-<arch>):
+    #   <jfrog_path>/openaev-agent[.exe]               binary
+    #   <jfrog_path>/openaev-agent-installer.exe       (Windows only)
+    #   <jfrog_path>/openaev-agent-installer-service-user.exe
+    #   <jfrog_path>/openaev-agent-installer-session-user.exe
+    # ──────────────────────────────────────────────────────────────
+    - name: Stage binary + Windows installers for upload
+      shell: bash
+      run: |
+        set -euo pipefail
+        STAGE="staging/${{ inputs.jfrog_path }}"
+        mkdir -p "$STAGE"
+
+        if [[ "${{ inputs.os }}" == "windows" ]]; then
+          cp "./target/${{ inputs.target }}/release/openaev-agent.exe" \
+             "$STAGE/openaev-agent.exe"
+          for installer in agent-installer.exe \
+                           agent-installer-service-user.exe \
+                           agent-installer-session-user.exe; do
+            cp "./installer/windows/$installer" "$STAGE/openaev-$installer"
+          done
+        else
+          cp "./target/${{ inputs.target }}/release/openaev-agent" \
+             "$STAGE/openaev-agent"
+        fi
+
+        ls -la "$STAGE"
+
+    - name: Upload binary artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: agent-bin-${{ inputs.os }}-${{ inputs.arch }}
+        path: staging/
+        if-no-files-found: error
+        retention-days: 14
