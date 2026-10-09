@@ -1,9 +1,9 @@
 name: "Set up Rust"
-description: "Install the Rust toolchain and restore the shared cargo cache."
+description: "Install the Rust toolchain and restore the cargo cache, which only main saves."
 
 inputs:
   cache-key:
-    description: "Cache key prefix, unique per job (e.g. 'os-trust', 'clippy')."
+    description: "Cache key, unique per job (e.g. 'os-trust', 'clippy'). The OS, architecture, rustc version and Cargo.lock are added to it."
     required: true
   targets:
     description: "Comma-separated rustup targets to add."
@@ -27,22 +27,11 @@ runs:
         targets: ${{ inputs.targets }}
         components: ${{ inputs.components }}
 
-    - name: Resolve cache paths
-      id: paths
-      shell: bash
-      run: |
-        {
-          echo "value<<EOF"
-          echo "~/.cargo/bin/"
-          echo "~/.cargo/registry/index/"
-          echo "~/.cargo/registry/cache/"
-          echo "~/.cargo/git/db/"
-          [ "${{ inputs.cache-target }}" = "true" ] && echo "target/"
-          echo "EOF"
-        } >> "$GITHUB_OUTPUT"
-
+    # Pull requests restore main's cache but never save their own: a PR's entry
+    # is only visible to that PR and would evict main's from the cache quota.
     - name: Cache
-      uses: actions/cache@v6
+      uses: Swatinem/rust-cache@v2
       with:
-        path: ${{ steps.paths.outputs.value }}
-        key: cargo-${{ inputs.cache-key }}-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
+        key: ${{ inputs.cache-key }}
+        cache-targets: ${{ inputs.cache-target }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}

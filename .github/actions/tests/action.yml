@@ -23,7 +23,7 @@ runs:
     - name: Set up Rust and cache
       uses: ./.github/actions/setup-rust
       with:
-        cache-key: tests-${{ inputs.arch }}
+        cache-key: tests
         targets: ${{ inputs.target }}
 
     - name: Run cargo test
