@@ -461,6 +461,35 @@ section "install"
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
 
+  ; Retrieve the SID for $ConfigUser using PowerShell
+  ; (needed both for the config ACL below and for the service permissions)
+  nsExec::ExecToStack "powershell.exe -NoProfile -WindowStyle Hidden -Command (New-Object System.Security.Principal.NTAccount('$ConfigUser')).Translate([System.Security.Principal.SecurityIdentifier]).Value"
+  Pop $R0    ; Pop the exit code
+  Pop $UserSID  ; Pop the SID string
+
+  ;remove newline and whitespace from the UserSID
+  Push $UserSID
+  Call Trim
+  Pop $UserSID
+
+  StrCpy $R1 $UserSID 4
+  ${If} $R1 != "S-1-"
+    Abort "Unable to resolve the SID of $ConfigUser"
+  ${EndIf}
+
+  ; The config holds the token. Without an explicit ACL it inherits the folder's,
+  ; which lets every local user read it. Restrict it to SYSTEM, Administrators and
+  ; read access for the service account while it is still empty, so the token never
+  ; sits in a readable file. Overwriting the file later keeps this ACL. Well-known
+  ; SIDs, not names: account names are localized.
+  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
+  FileClose $4
+  nsExec::ExecToLog 'icacls "$INSTDIR\openaev-agent-config.toml" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F *$UserSID:R'
+  Pop $0
+  ${If} $0 != 0
+    Abort "Unable to restrict access to $INSTDIR\openaev-agent-config.toml (icacls exit code $0)"
+  ${EndIf}
+
   ; write agent config file
   FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
     FileWrite $4 "debug=false$\r$\n"
@@ -483,17 +512,7 @@ section "install"
   ; configure restart in case of failure
   ExecWait 'sc failure $ServiceName reset= 0 actions= restart/60000/restart/60000/restart/60000'
 
-  ;------ Add the permissions to start/stop service for the user
-
-  ; Retrieve the SID for $ConfigUser using PowerShell
-  nsExec::ExecToStack "powershell.exe -NoProfile -WindowStyle Hidden -Command (New-Object System.Security.Principal.NTAccount('$ConfigUser')).Translate([System.Security.Principal.SecurityIdentifier]).Value"
-  Pop $R0    ; Pop the exit code
-  Pop $UserSID  ; Pop the SID string
-
-  ;remove newline and whitespace from the UserSID
-  Push $UserSID
-  Call Trim
-  Pop $UserSID
+  ;------ Add the permissions to start/stop service for the user ($UserSID retrieved above)
 
   ; Get Existing permssion and Add permission for the user to stop/start the service
   nsExec::ExecToStack "cmd /c sc sdshow $ServiceName"
