@@ -25,6 +25,7 @@ import tempfile
 import threading
 import time
 import tomllib
+import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -208,21 +209,34 @@ def implant_command(url, arch):
     )
 
 
-def last_release(repository="origin"):
+def release_versions(repository):
+    """Release tags of a repository, newest first."""
     tags = subprocess.run(
         ["git", "ls-remote", "--tags", "--refs", repository],
         cwd=REPOSITORY, capture_output=True, check=True, text=True,
     ).stdout.split()
     versions = [t.rsplit("/", 1)[1] for t in tags if re.fullmatch(r"refs/tags/\d+\.\d+\.\d+", t)]
-    return max(versions, key=lambda v: tuple(map(int, v.split("."))))
+    return sorted(versions, key=lambda v: tuple(map(int, v.split("."))), reverse=True)
 
 
-def download_release(product, name, version, arch):
+def download_last_release(repository, product, name, arch):
+    """The newest release published in JFrog, as (version, content).
+
+    A tag exists before its CI has passed and its artifacts are promoted, so a
+    tag that is not published yet is skipped, as on the CI run of the tag itself.
+    """
     stem, dot, extension = name.partition(".")
-    url = f"{JFROG}/{product}/{OS}/{arch}/{stem}-{version}{dot}{extension}"
-    print(f"Downloading {url}")
-    with urllib.request.urlopen(url) as response:
-        return response.read()
+    for version in release_versions(repository):
+        url = f"{JFROG}/{product}/{OS}/{arch}/{stem}-{version}{dot}{extension}"
+        try:
+            with urllib.request.urlopen(url) as response:
+                print(f"Downloaded {url}")
+                return version, response.read()
+        except urllib.error.HTTPError as error:
+            if error.code != 404:
+                raise
+            print(f"Not published yet: {url}")
+    sys.exit(f"::error::No published {product} release in JFrog")
 
 
 def run_script(text, directory, name):
@@ -310,10 +324,9 @@ def main():
     new_package = (artifact_dir / PACKAGE).read_bytes()
     new_digest = hashlib.sha256((artifact_dir / BINARY).read_bytes()).hexdigest()
     new_version = tomllib.loads((REPOSITORY / "Cargo.toml").read_text())["package"]["version"]
-    old_version = last_release()
-    old_package = download_release("openaev-agent", PACKAGE, old_version, arch)
+    old_version, old_package = download_last_release("origin", "openaev-agent", PACKAGE, arch)
     implant_name = "openaev-implant.exe" if OS == "windows" else "openaev-implant"
-    State.implant = download_release("openaev-implant", implant_name, last_release(IMPLANT_REPOSITORY), arch)
+    State.implant = download_last_release(IMPLANT_REPOSITORY, "openaev-implant", implant_name, arch)[1]
 
     work = Path(tempfile.mkdtemp())
     key = ReleaseKey(work)
