@@ -323,6 +323,10 @@ def main():
 
     try:
         # 1. Install the last release as a service.
+        if OS == "linux":
+            # The job can start while the runner is still booting, and the
+            # installer refuses a systemd that is not up yet.
+            subprocess.run(["systemctl", "is-system-running", "--wait"], timeout=300)
         State.artifact = (old_package, key.sign(old_package), old_version)
         run_script(render_script("agent-installer", url, key), work, "agent-installer")
         wait_for(lambda: State.registrations, 120, "The installed agent never registered")

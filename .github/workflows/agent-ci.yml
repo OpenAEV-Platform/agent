@@ -521,7 +521,9 @@ jobs:
           # the step's output open if it outlives the kill below.
           "$BIN" > "$dir/stdout.log" 2>&1 &
           pid=$!
-          for _ in $(seq 30); do
+          # Generous: on a cold Windows arm64 runner the first registration
+          # attempt can come more than 30 seconds after startup.
+          for _ in $(seq 120); do
             grep -q 'Fail registering the agent' "$log" 2>/dev/null && break
             kill -0 "$pid" 2>/dev/null || break
             sleep 1
