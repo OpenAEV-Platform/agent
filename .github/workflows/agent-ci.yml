@@ -435,6 +435,172 @@ jobs:
           retention-days: 14
 
   # ──────────────────────────────────────────────────────────────────
+  # Smoke-test the release binaries on every supported OS version,
+  # including ones the build does not run on. Pointed at a platform
+  # URL that refuses connections, the agent must load its config file,
+  # create its working directories, log a failed registration and
+  # keep running.
+  # ──────────────────────────────────────────────────────────────────
+  smoke:
+    name: "💨 Smoke (${{ matrix.runner }})"
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-22.04
+            artifact: ubuntu-x86_64
+            bin: linux/x86_64/openaev-agent
+          - runner: ubuntu-26.04
+            artifact: ubuntu-x86_64
+            bin: linux/x86_64/openaev-agent
+          - runner: ubuntu-22.04-arm
+            artifact: ubuntu-arm64
+            bin: linux/arm64/openaev-agent
+          - runner: ubuntu-26.04-arm
+            artifact: ubuntu-arm64
+            bin: linux/arm64/openaev-agent
+          - runner: windows-2022
+            artifact: windows-x86_64
+            bin: windows/x86_64/openaev-agent.exe
+          - runner: windows-2025
+            artifact: windows-x86_64
+            bin: windows/x86_64/openaev-agent.exe
+          - runner: windows-11-arm
+            artifact: windows-arm64
+            bin: windows/arm64/openaev-agent.exe
+          - runner: macos-15
+            artifact: macos-arm64
+            bin: macos/arm64/openaev-agent
+          - runner: macos-26
+            artifact: macos-arm64
+            bin: macos/arm64/openaev-agent
+          - runner: macos-15-intel
+            artifact: macos-x86_64
+            bin: macos/x86_64/openaev-agent
+          - runner: macos-26-intel
+            artifact: macos-x86_64
+            bin: macos/x86_64/openaev-agent
+    steps:
+      - name: Download binary artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: agent-bin-${{ matrix.artifact }}
+          path: smoke
+
+      - name: Run the agent against an unreachable platform
+        shell: bash
+        env:
+          BIN: smoke/${{ matrix.bin }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          dir=$(dirname "$BIN")
+          log="$dir/openaev-agent.log"
+          chmod +x "$BIN"
+
+          # The agent reads openaev-agent-config.toml next to its binary.
+          # Nothing listens on port 1, so every API call fails at once.
+          cat > "$dir/openaev-agent-config.toml" <<'EOF'
+          debug = false
+
+          [openaev]
+          url = "http://127.0.0.1:1"
+          token = "smoke-test"
+          unsecured_certificate = false
+          with_proxy = false
+          installation_mode = "session-user"
+          service_name = "OAEVAgentService"
+          tenant_id = "smoke-test"
+          EOF
+
+          # Redirect the output so the background process does not hold
+          # the step's output open if it outlives the kill below.
+          "$BIN" > "$dir/stdout.log" 2>&1 &
+          pid=$!
+          # Generous: on a cold Windows arm64 runner the first registration
+          # attempt can come more than 30 seconds after startup.
+          for _ in $(seq 120); do
+            grep -q 'Fail registering the agent' "$log" 2>/dev/null && break
+            kill -0 "$pid" 2>/dev/null || break
+            sleep 1
+          done
+          alive=true
+          kill -0 "$pid" 2>/dev/null || alive=false
+          kill "$pid" 2>/dev/null || true
+
+          echo "--- stdout/stderr ---"; cat "$dir/stdout.log"
+          echo "--- $log ---"; cat "$log" 2>/dev/null || true
+
+          [[ $alive == true ]] || fail "The agent exited"
+          grep -q 'Starting OpenAEV agent' "$log" || fail "No startup line in $log"
+          grep -q 'Fail registering the agent' "$log" || fail "No registration attempt in $log"
+          [[ -d "$dir/runtimes" && -d "$dir/payloads" ]] || fail "Working directories were not created"
+          echo "✅ Smoke test passed"
+
+  # ──────────────────────────────────────────────────────────────────
+  # Run the agent as a service against a mock platform: install the
+  # last release with this branch's installer script, upgrade it to this
+  # build through an upgrade job, then have it launch the last released
+  # implant through an inject job, the way the real platform does.
+  # ──────────────────────────────────────────────────────────────────
+  service-smoke:
+    name: "🛠️ Service smoke (${{ matrix.os }}-${{ matrix.arch }})"
+    needs: build
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu
+            arch: x86_64
+            runner: ubuntu-latest
+            jfrog_path: linux/x86_64
+          - os: ubuntu
+            arch: arm64
+            runner: ubuntu-24.04-arm
+            jfrog_path: linux/arm64
+          - os: windows
+            arch: x86_64
+            runner: windows-latest
+            jfrog_path: windows/x86_64
+          - os: windows
+            arch: arm64
+            runner: windows-11-arm
+            jfrog_path: windows/arm64
+          - os: macos
+            arch: x86_64
+            runner: macos-15-intel
+            jfrog_path: macos/x86_64
+          - os: macos
+            arch: arm64
+            runner: macos-latest
+            jfrog_path: macos/arm64
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      - name: Download binary artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: agent-bin-${{ matrix.os }}-${{ matrix.arch }}
+          path: smoke
+
+      # Bash puts Git's openssl on PATH on Windows too; the mock signs with it.
+      - name: Install, upgrade to this build and launch an implant
+        shell: bash
+        run: python .github/scripts/agent-service-smoke.py smoke/${{ matrix.jfrog_path }}
+
+  # ──────────────────────────────────────────────────────────────────
   # OS-level installer / upgrade scripts (arch-independent).
   # Uploaded once per OS so the downstream workflow does not need to
   # deduplicate matrix outputs.
