@@ -5,10 +5,12 @@ mod tests {
     use crate::api::{Client, AUTHORIZATION_HEADER};
     use crate::tests::api::client::TOKEN;
     use crate::tests::api::tls_server::serve_self_signed_https;
+    use crate::tests::secrets::{FailingStore, MemoryStore};
     use mockito;
     use std::env;
     use std::error::Error;
     use std::io;
+    use std::sync::Arc;
 
     fn is_invalid_certificate(err: &reqwest::Error) -> bool {
         let mut current: Option<&(dyn Error + 'static)> = Some(err);
@@ -39,11 +41,44 @@ mod tests {
             .match_header(AUTHORIZATION_HEADER, format!("Bearer {}", TOKEN).as_str())
             .with_status(200)
             .create();
-        let client = Client::new(server_url, TOKEN.to_string(), false, false);
+        let client = Client::new(server_url, MemoryStore::with_token(TOKEN), false, false);
 
         // -- EXECUTE & ASSERT --
-        let res = client.post("/api/test").send();
+        let res = client.post("/api/test").unwrap().send();
         assert!(res.is_ok(), "User-Agent should match expected format");
+    }
+
+    #[test]
+    fn test_client_fails_the_request_without_a_token() {
+        // -- PREPARE --
+        let client = Client::new(
+            "http://localhost".to_string(),
+            Arc::new(FailingStore),
+            false,
+            false,
+        );
+
+        // -- EXECUTE & ASSERT --
+        assert!(client.post("/api/test").is_err());
+    }
+
+    #[test]
+    fn test_client_keeps_the_token_out_of_debug_output() {
+        // -- PREPARE --
+        let client = Client::new(
+            "http://localhost".to_string(),
+            MemoryStore::with_token(TOKEN),
+            false,
+            false,
+        );
+
+        // -- EXECUTE --
+        let request = client.post("/api/test").unwrap().build().unwrap();
+
+        // -- ASSERT --
+        let header = request.headers().get(AUTHORIZATION_HEADER).unwrap();
+        assert!(header.is_sensitive());
+        assert!(!format!("{request:?}").contains(TOKEN));
     }
 
     #[test]
@@ -54,12 +89,22 @@ mod tests {
         let mut server = mockito::Server::new();
         let server_url = server.url();
         server.mock("POST", "/api/test").with_status(200).create();
-        let client_without_proxy = Client::new(server_url.clone(), TOKEN.to_string(), false, false);
-        let client_with_proxy = Client::new(server_url.clone(), TOKEN.to_string(), false, true);
+        let client_without_proxy = Client::new(
+            server_url.clone(),
+            MemoryStore::with_token(TOKEN),
+            false,
+            false,
+        );
+        let client_with_proxy = Client::new(
+            server_url.clone(),
+            MemoryStore::with_token(TOKEN),
+            false,
+            true,
+        );
 
         // -- EXECUTE --
-        let res_without_proxy = client_without_proxy.post("/api/test").send();
-        let res_with_proxy = client_with_proxy.post("/api/test").send();
+        let res_without_proxy = client_without_proxy.post("/api/test").unwrap().send();
+        let res_with_proxy = client_with_proxy.post("/api/test").unwrap().send();
 
         // -- ASSERT --
         assert!(res_without_proxy.is_ok(), "Client should bypass the proxy");
@@ -77,12 +122,15 @@ mod tests {
         // -- PREPARE --
         let url = serve_self_signed_https();
         let client_without_unsecured_certificate =
-            Client::new(url.clone(), TOKEN.to_string(), false, false);
-        let client_with_unsecured_certificate = Client::new(url, TOKEN.to_string(), true, false);
+            Client::new(url.clone(), MemoryStore::with_token(TOKEN), false, false);
+        let client_with_unsecured_certificate =
+            Client::new(url, MemoryStore::with_token(TOKEN), true, false);
 
         // -- EXECUTE --
-        let res_without_unsecured_certificate = client_without_unsecured_certificate.get("").send();
-        let res_with_unsecured_certificate = client_with_unsecured_certificate.get("").send();
+        let res_without_unsecured_certificate =
+            client_without_unsecured_certificate.get("").unwrap().send();
+        let res_with_unsecured_certificate =
+            client_with_unsecured_certificate.get("").unwrap().send();
 
         // -- ASSERT --
         assert!(
@@ -106,10 +154,10 @@ mod tests {
         // the CI job empties the OS trust store, so only the bundled roots can validate this URL
         let url = env::var("OAEV_BUNDLED_ROOTS_URL")
             .expect("OAEV_BUNDLED_ROOTS_URL must be set by the os-trust-store CI job");
-        let client = Client::new(url, TOKEN.to_string(), false, false);
+        let client = Client::new(url, MemoryStore::with_token(TOKEN), false, false);
 
         // -- EXECUTE --
-        let res = client.get("").send();
+        let res = client.get("").unwrap().send();
 
         // -- ASSERT --
         assert!(
@@ -125,11 +173,11 @@ mod tests {
         // -- PREPARE --
         let url = env::var("OAEV_OS_TRUST_URL")
             .expect("OAEV_OS_TRUST_URL must be set by the os-trust-store CI job");
-        let client = Client::new(url, TOKEN.to_string(), false, false);
+        let client = Client::new(url, MemoryStore::with_token(TOKEN), false, false);
 
         // -- EXECUTE & ASSERT --
         assert!(
-            client.get("").send().is_ok(),
+            client.get("").unwrap().send().is_ok(),
             "Client should trust a CA present only in the OS trust store"
         );
     }
