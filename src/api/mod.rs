@@ -1,4 +1,9 @@
+use crate::common::error_model::Error;
+use crate::secrets::{SecretStore, TOKEN};
+use reqwest::header::HeaderValue;
+use std::sync::Arc;
 use std::time::Duration;
+use zeroize::Zeroizing;
 
 mod manage_jobs;
 mod register_agent;
@@ -6,17 +11,16 @@ mod register_agent;
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 pub const AUTHORIZATION_HEADER: &str = "Authorization";
 
-#[derive(Debug)]
 pub struct Client {
     http_client: reqwest::blocking::Client,
     server_url: String,
-    token: String,
+    secrets: Arc<dyn SecretStore>,
 }
 
 impl Client {
     pub fn new(
         server_url: String,
-        token: String,
+        secrets: Arc<dyn SecretStore>,
         unsecured_certificate: bool,
         with_proxy: bool,
     ) -> Client {
@@ -48,29 +52,44 @@ impl Client {
         Client {
             http_client: http_client.build().unwrap(),
             server_url: url,
-            token,
+            secrets,
         }
     }
 
+    /// Reads the token from the store for this request only, so it does not stay in memory
+    /// between requests.
+    fn authorization(&self) -> Result<HeaderValue, Error> {
+        let token = self.secrets.get(TOKEN)?;
+        let bearer = Zeroizing::new(format!("Bearer {}", token.as_str()));
+        let mut value =
+            HeaderValue::from_str(&bearer).map_err(|err| Error::Internal(err.to_string()))?;
+        // Keeps it out of reqwest's debug output.
+        value.set_sensitive(true);
+        Ok(value)
+    }
+
     #[cfg(test)]
-    pub fn get(&self, route: &str) -> reqwest::blocking::RequestBuilder {
+    pub fn get(&self, route: &str) -> Result<reqwest::blocking::RequestBuilder, Error> {
         let api_route = format!("{}{}", self.server_url, route);
-        self.http_client
+        Ok(self
+            .http_client
             .get(&api_route)
-            .header(AUTHORIZATION_HEADER, &format!("Bearer {}", self.token))
+            .header(AUTHORIZATION_HEADER, self.authorization()?))
     }
 
-    pub fn post(&self, route: &str) -> reqwest::blocking::RequestBuilder {
+    pub fn post(&self, route: &str) -> Result<reqwest::blocking::RequestBuilder, Error> {
         let api_route = format!("{}{}", self.server_url, route);
-        self.http_client
+        Ok(self
+            .http_client
             .post(&api_route)
-            .header(AUTHORIZATION_HEADER, &format!("Bearer {}", self.token))
+            .header(AUTHORIZATION_HEADER, self.authorization()?))
     }
 
-    pub fn delete(&self, route: &str) -> reqwest::blocking::RequestBuilder {
+    pub fn delete(&self, route: &str) -> Result<reqwest::blocking::RequestBuilder, Error> {
         let api_route = format!("{}{}", self.server_url, route);
-        self.http_client
+        Ok(self
+            .http_client
             .delete(&api_route)
-            .header(AUTHORIZATION_HEADER, &format!("Bearer {}", self.token))
+            .header(AUTHORIZATION_HEADER, self.authorization()?))
     }
 }

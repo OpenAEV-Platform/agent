@@ -2,6 +2,7 @@ mod api;
 mod common;
 mod config;
 mod process;
+mod secrets;
 mod windows;
 
 #[cfg(test)]
@@ -24,6 +25,7 @@ use crate::process::agent_job;
 use crate::process::{agent_cleanup, keep_alive};
 use crate::windows::service::service_stub;
 use tracing_subscriber::filter::LevelFilter;
+use zeroize::Zeroizing;
 
 pub static THREADS_CONTROL: AtomicBool = AtomicBool::new(true);
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -59,9 +61,12 @@ fn compute_working_dir() -> PathBuf {
     current_exe_path.parent().unwrap().to_path_buf()
 }
 
-fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHandle<()>>, Error> {
+fn agent_start(
+    mut settings_data: Settings,
+    is_service: bool,
+) -> Result<Vec<JoinHandle<()>>, Error> {
     let url = settings_data.openaev.url;
-    let token = settings_data.openaev.token;
+    let secrets = secrets::open(settings_data.openaev.token.take().map(Zeroizing::new));
     let unsecured_certificate = settings_data.openaev.unsecured_certificate;
     let with_proxy = settings_data.openaev.with_proxy;
     let installation_mode = settings_data.openaev.installation_mode;
@@ -81,7 +86,7 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
 
     let keep_alive_thread = keep_alive::ping(
         url.clone(),
-        token.clone(),
+        secrets.clone(),
         unsecured_certificate,
         with_proxy,
         installation_mode,
@@ -92,7 +97,7 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
     // Starts the agent listening thread
     let agent_job_thread = agent_job::listen(
         url.clone(),
-        token.clone(),
+        secrets,
         unsecured_certificate,
         with_proxy,
         execution_details.clone(),

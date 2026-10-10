@@ -1,9 +1,11 @@
 use crate::api::Client;
 use crate::config::execution_details::ExecutionDetails;
+use crate::secrets::SecretStore;
 use crate::THREADS_CONTROL;
 use log::{error, info};
 use std::io::Error;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::thread;
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
@@ -11,7 +13,7 @@ use std::time::Duration;
 #[allow(clippy::too_many_arguments)]
 pub fn ping(
     uri: String,
-    token: String,
+    secrets: Arc<dyn SecretStore>,
     unsecured_certificate: bool,
     with_proxy: bool,
     installation_mode: String,
@@ -20,7 +22,7 @@ pub fn ping(
     tenant_id: String,
 ) -> Result<JoinHandle<()>, Error> {
     info!("Starting ping thread");
-    let api = Client::new(uri, token, unsecured_certificate, with_proxy);
+    let api = Client::new(uri, secrets, unsecured_certificate, with_proxy);
     let handle = thread::spawn(move || {
         // While no stop signal received
         while THREADS_CONTROL.load(Ordering::Relaxed) {

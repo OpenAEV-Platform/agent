@@ -117,7 +117,7 @@ impl Client {
         // endregion
         // Post the input to the OpenAEV API
         let register_endpoint = format!("/api/tenants/{}/endpoints/register", tenant_id);
-        match self.post(&register_endpoint).json(&post_data).send() {
+        match self.post(&register_endpoint)?.json(&post_data).send() {
             Ok(response) => {
                 if response.status().is_success() {
                     response
