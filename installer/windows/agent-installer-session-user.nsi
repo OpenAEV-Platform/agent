@@ -469,15 +469,24 @@ section "install"
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
 
-  ; Retrieve the SID of the user running this installer (the agent runs as this user)
-  nsExec::ExecToStack "powershell.exe -NoProfile -WindowStyle Hidden -Command [System.Security.Principal.WindowsIdentity]::GetCurrent().User.Value"
+  ; Retrieve the SID of the user running this installer (the agent runs as this user).
+  ; whoami reads it from the process token: no PowerShell (which AppLocker or
+  ; Constrained Language Mode can block) and no domain controller needed.
+  ; Output: "domain\user","S-1-..."
+  nsExec::ExecToStack '"$SYSDIR\whoami.exe" /user /fo csv /nh'
   Pop $R0    ; Pop the exit code
-  Pop $UserSID  ; Pop the SID string
+  Pop $UserSID  ; Pop the output
+  Push $UserSID
+  Push ',"S-1-'
+  Call StrStr
+  Pop $UserSID
+  StrCpy $UserSID $UserSID "" 2 ; drop the separator
 
-  ;remove newline and whitespace from the UserSID
+  ;remove newline and whitespace from the UserSID, then the closing quote
   Push $UserSID
   Call Trim
   Pop $UserSID
+  StrCpy $UserSID $UserSID -1
 
   StrCpy $R1 $UserSID 4
   ${If} $R1 != "S-1-"
@@ -489,16 +498,22 @@ section "install"
   ; the current user while it is still empty, so the token never sits in a readable
   ; file. Overwriting the file later keeps this ACL. The user keeps full control: the
   ; session-user upgrade reruns this installer as that user and rewrites the file.
-  ; Well-known SIDs, not names: account names are localized.
+  ; Well-known SIDs, not names: account names are localized. icacls by full path:
+  ; a bare name is looked up in the installer's folder first.
+  ClearErrors
   FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
   FileClose $4
-  nsExec::ExecToLog 'icacls "$INSTDIR\openaev-agent-config.toml" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F *$UserSID:F'
+  ${If} ${Errors}
+    Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+  nsExec::ExecToLog '"$SYSDIR\icacls.exe" "$INSTDIR\openaev-agent-config.toml" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F *$UserSID:F'
   Pop $0
   ${If} $0 != 0
     Abort "Unable to restrict access to $INSTDIR\openaev-agent-config.toml (icacls exit code $0)"
   ${EndIf}
 
-  ; write agent config file
+  ; write agent config file (FileOpen and FileWrite only set the error flag on failure)
+  ClearErrors
   FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "$\r$\n"
@@ -513,6 +528,9 @@ section "install"
     FileWrite $4 "tenant_id = $\"$ConfigTenantId$\"$\r$\n"
     FileWrite $4 "$\r$\n" ; newline
   FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
 
   ; write agent start file to launch the agent without a powershell window displayed
   FileOpen $4 "$INSTDIR\openaev_agent_start.ps1" w

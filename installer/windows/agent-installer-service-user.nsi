@@ -461,15 +461,10 @@ section "install"
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
 
-  ; Retrieve the SID for $ConfigUser using PowerShell
+  ; Retrieve the SID for $ConfigUser
   ; (needed both for the config ACL below and for the service permissions)
-  nsExec::ExecToStack "powershell.exe -NoProfile -WindowStyle Hidden -Command (New-Object System.Security.Principal.NTAccount('$ConfigUser')).Translate([System.Security.Principal.SecurityIdentifier]).Value"
-  Pop $R0    ; Pop the exit code
-  Pop $UserSID  ; Pop the SID string
-
-  ;remove newline and whitespace from the UserSID
-  Push $UserSID
-  Call Trim
+  Push $ConfigUser
+  Call ResolveAccountSid
   Pop $UserSID
 
   StrCpy $R1 $UserSID 4
@@ -481,16 +476,22 @@ section "install"
   ; which lets every local user read it. Restrict it to SYSTEM, Administrators and
   ; read access for the service account while it is still empty, so the token never
   ; sits in a readable file. Overwriting the file later keeps this ACL. Well-known
-  ; SIDs, not names: account names are localized.
+  ; SIDs, not names: account names are localized. icacls by full path: a bare
+  ; name is looked up in the installer's folder first.
+  ClearErrors
   FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
   FileClose $4
-  nsExec::ExecToLog 'icacls "$INSTDIR\openaev-agent-config.toml" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F *$UserSID:R'
+  ${If} ${Errors}
+    Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+  nsExec::ExecToLog '"$SYSDIR\icacls.exe" "$INSTDIR\openaev-agent-config.toml" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F *$UserSID:R'
   Pop $0
   ${If} $0 != 0
     Abort "Unable to restrict access to $INSTDIR\openaev-agent-config.toml (icacls exit code $0)"
   ${EndIf}
 
-  ; write agent config file
+  ; write agent config file (FileOpen and FileWrite only set the error flag on failure)
+  ClearErrors
   FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "$\r$\n"
@@ -505,6 +506,9 @@ section "install"
     FileWrite $4 "tenant_id = $\"$ConfigTenantId$\"$\r$\n"
     FileWrite $4 "$\r$\n" ; newline
   FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
 
   ; register windows service
   ExecWait 'sc create $ServiceName error="severe" displayname="$DisplayName" obj="$ConfigUser" password="$ConfigPassword" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"' $R0
@@ -663,6 +667,53 @@ section "uninstall"
   ; delete everything
   RMDir /r $INSTDIR
 sectionEnd
+
+; ResolveAccountSid
+;   Returns the SID ("S-1-...") of an account name, or "" if it cannot be resolved.
+;   Calls the Windows API rather than PowerShell, which AppLocker or Constrained
+;   Language Mode can block, and which a quote in the name breaks.
+; Usage:
+;   Push <account>
+;   Call ResolveAccountSid
+;   Pop <sid>
+Function ResolveAccountSid
+  Exch $0 ; Account name
+  Push $1
+  Push $2
+  Push $3
+
+  ; An empty name would resolve to the BUILTIN domain
+  ${If} $0 == ""
+    Goto Done
+  ${EndIf}
+
+  ; sc.exe takes ".\name" for a local account; the lookup needs "COMPUTER\name"
+  StrCpy $1 $0 2
+  ${If} $1 == ".\"
+    ReadEnvStr $1 COMPUTERNAME
+    StrCpy $0 $0 "" 2
+    StrCpy $0 "$1\$0"
+  ${EndIf}
+
+  System::Alloc 68 ; SECURITY_MAX_SID_SIZE
+  Pop $1
+  System::Call 'advapi32::LookupAccountNameW(p 0, w r0, p r1, *i 68, w .r2, *i ${NSIS_MAX_STRLEN}, *i .r3) i .r3'
+  StrCpy $0 ""
+  ${If} $3 != 0
+    System::Call 'advapi32::ConvertSidToStringSidW(p r1, *p .r2) i .r3'
+    ${If} $3 != 0
+      System::Call 'kernel32::lstrcpynW(w .r0, p r2, i ${NSIS_MAX_STRLEN})'
+      System::Call 'kernel32::LocalFree(p r2)'
+    ${EndIf}
+  ${EndIf}
+  System::Free $1
+
+  Done:
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
 
 ; Trim
 ;   Removes leading & trailing whitespace from a string
