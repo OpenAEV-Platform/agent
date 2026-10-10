@@ -11,6 +11,7 @@ mid = "=3.0.7"
 tracing-appender = "0.2.3"
 rolling-file = "0.2.0"
 webpki-root-certs = "1.0.9"
+zeroize = "1.9.0"
 
 [dependencies.reqwest]
 version = "0.13.0"
