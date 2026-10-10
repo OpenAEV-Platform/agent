@@ -6,9 +6,13 @@
 //! each use rather than keeping it in memory.
 
 mod config_store;
+#[cfg(windows)]
+mod dpapi;
 mod import;
 
 pub use config_store::ConfigStore;
+#[cfg(windows)]
+pub use dpapi::DpapiStore;
 pub use import::import;
 
 use crate::common::error_model::Error;
@@ -57,6 +61,12 @@ pub fn open(config_token: Option<Zeroizing<String>>) -> Arc<dyn SecretStore> {
 }
 
 /// The OS secret store of this platform, if the agent supports one there.
+#[cfg(windows)]
+fn platform_store(install_dir: &Path) -> Option<Arc<dyn SecretStore>> {
+    Some(Arc::new(DpapiStore::new(install_dir.to_path_buf())))
+}
+
+#[cfg(not(windows))]
 fn platform_store(_install_dir: &Path) -> Option<Arc<dyn SecretStore>> {
     None
 }

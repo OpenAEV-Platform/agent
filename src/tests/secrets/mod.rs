@@ -1,4 +1,5 @@
 mod config_store_tests;
+mod dpapi_tests;
 mod import_tests;
 
 use crate::common::error_model::Error;
