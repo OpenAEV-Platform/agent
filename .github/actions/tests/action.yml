@@ -26,6 +26,14 @@ runs:
         cache-key: tests
         targets: ${{ inputs.target }}
 
+    # Windows keeps the runner's default shell: Git Bash would put its own Unix
+    # tools (whoami, sh...) ahead of the Windows ones in the tests' PATH.
     - name: Run cargo test
+      if: inputs.os != 'windows'
       run: cargo test --target=${{ inputs.target }} --locked
       shell: bash
+
+    - name: Run cargo test (Windows)
+      if: inputs.os == 'windows'
+      run: cargo test --target=${{ inputs.target }} --locked
+      shell: pwsh
