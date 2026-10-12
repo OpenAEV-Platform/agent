@@ -1045,6 +1045,8 @@ dependencies = [
     "webpki-root-certs",
     "windows-service",
     "windows-service-detector",
+    "windows-sys 0.61.2",
+    "zeroize",
 ]
 
 [[package]]

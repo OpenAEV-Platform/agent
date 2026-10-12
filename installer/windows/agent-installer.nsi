@@ -43,6 +43,24 @@ ${If} $0 != "admin" ;Require admin rights on NT4+
 ${EndIf}
 !macroend
 
+; Creates the file empty and restricts it before anything is written to it, so no
+; secret ever sits in a file other local users can read. Overwriting it later keeps
+; the ACL. Well-known SIDs, not names: account names are localized. icacls by full
+; path: a bare name is looked up in the installer's folder first.
+!macro CreateRestrictedFile path grants
+  ClearErrors
+  FileOpen $4 "${path}" w
+  FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to create ${path}"
+  ${EndIf}
+  nsExec::ExecToLog '"$SYSDIR\icacls.exe" "${path}" /inheritance:r /grant:r ${grants}'
+  Pop $0
+  ${If} $0 != 0
+    Abort "Unable to restrict access to ${path} (icacls exit code $0)"
+  ${EndIf}
+!macroend
+
 Var Dialog
 Var LabelURL
 Var /GLOBAL ConfigURL
@@ -371,12 +389,16 @@ section "install"
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
   
-  ; write agent config file
+  ; The config does not hold the token any more, but tells which platform and
+  ; tenant the agent reports to: it keeps the restricted ACL.
+  !insertmacro CreateRestrictedFile "$INSTDIR\openaev-agent-config.toml" "*S-1-5-18:F *S-1-5-32-544:F"
+
+  ; write agent config file (FileOpen and FileWrite only set the error flag on failure)
+  ClearErrors
   FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "[openaev]$\r$\n"
     FileWrite $4 "url = $\"$ConfigURL$\"$\r$\n"
-    FileWrite $4 "token = $\"$ConfigToken$\"$\r$\n"
     FileWrite $4 "unsecured_certificate = $ConfigUnsecuredCertificate$\r$\n"
     FileWrite $4 "with_proxy = $ConfigWithProxy$\r$\n"
     FileWrite $4 "installation_mode = $\"service$\"$\r$\n"
@@ -385,6 +407,24 @@ section "install"
     FileWrite $4 "tenant_id = $\"$ConfigTenantId$\"$\r$\n"
     FileWrite $4 "$\r$\n" ; newline
   FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+
+  ; The token goes to a bootstrap file, never to the config. On its first start the
+  ; agent encrypts it with DPAPI into openaev-agent-token.dpapi, then deletes the
+  ; bootstrap file. The encrypted file is created here, empty, to get the same ACL:
+  ; the agent rewrites it in place. Both are restricted to SYSTEM (the service
+  ; account) and Administrators.
+  !insertmacro CreateRestrictedFile "$INSTDIR\openaev-agent-token.dpapi" "*S-1-5-18:F *S-1-5-32-544:F"
+  !insertmacro CreateRestrictedFile "$INSTDIR\openaev-agent-token.bootstrap" "*S-1-5-18:F *S-1-5-32-544:F"
+  ClearErrors
+  FileOpen $4 "$INSTDIR\openaev-agent-token.bootstrap" w
+    FileWrite $4 "$ConfigToken"
+  FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to write $INSTDIR\openaev-agent-token.bootstrap"
+  ${EndIf}
 
   ; register windows service
   ExecWait 'sc create $ServiceName error="severe" displayname="${displayName}" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"'
