@@ -1,0 +1,70 @@
+name: Smoke
+description: "Start the built agent against an unreachable platform and check it loads its config and keeps running"
+
+inputs:
+  artifact:
+    description: "Build artifact suffix (agent-bin-<artifact>)"
+    required: true
+  bin:
+    description: "Binary path inside the artifact"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Download binary artifact
+      uses: actions/download-artifact@v8
+      with:
+        name: agent-bin-${{ inputs.artifact }}
+        path: smoke
+
+    - name: Run the agent against an unreachable platform
+      shell: bash
+      env:
+        BIN: smoke/${{ inputs.bin }}
+      run: |
+        set -euo pipefail
+        fail() { echo "::error::$1"; exit 1; }
+
+        dir=$(dirname "$BIN")
+        log="$dir/openaev-agent.log"
+        chmod +x "$BIN"
+
+        # The agent reads openaev-agent-config.toml next to its binary.
+        # Nothing listens on port 1, so every API call fails at once.
+        cat > "$dir/openaev-agent-config.toml" <<'EOF'
+        debug = false
+
+        [openaev]
+        url = "http://127.0.0.1:1"
+        token = "smoke-test"
+        unsecured_certificate = false
+        with_proxy = false
+        installation_mode = "session-user"
+        service_name = "OAEVAgentService"
+        tenant_id = "smoke-test"
+        EOF
+
+        # Redirect the output so the background process does not hold
+        # the step's output open if it outlives the kill below.
+        "$BIN" > "$dir/stdout.log" 2>&1 &
+        pid=$!
+        # Generous: on a cold Windows arm64 runner the first registration
+        # attempt can come more than 30 seconds after startup.
+        for _ in $(seq 120); do
+          grep -q 'Fail registering the agent' "$log" 2>/dev/null && break
+          kill -0 "$pid" 2>/dev/null || break
+          sleep 1
+        done
+        alive=true
+        kill -0 "$pid" 2>/dev/null || alive=false
+        kill "$pid" 2>/dev/null || true
+
+        echo "--- stdout/stderr ---"; cat "$dir/stdout.log"
+        echo "--- $log ---"; cat "$log" 2>/dev/null || true
+
+        [[ $alive == true ]] || fail "The agent exited"
+        grep -q 'Starting OpenAEV agent' "$log" || fail "No startup line in $log"
+        grep -q 'Fail registering the agent' "$log" || fail "No registration attempt in $log"
+        [[ -d "$dir/runtimes" && -d "$dir/payloads" ]] || fail "Working directories were not created"
+        echo "✅ Smoke test passed"

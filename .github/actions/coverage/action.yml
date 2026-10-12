@@ -1,0 +1,38 @@
+name: Coverage
+description: "Measure line coverage with cargo-llvm-cov and upload it to Codecov"
+
+inputs:
+  codecov-token:
+    description: "Codecov upload token"
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Rust and cache
+      uses: ./.github/actions/setup-rust
+      with:
+        cache-key: coverage
+        components: llvm-tools-preview
+
+    - name: Install cargo-llvm-cov
+      uses: taiki-e/install-action@v2
+      with:
+        tool: cargo-llvm-cov
+
+    - name: Generate coverage (lcov)
+      run: |
+        cargo llvm-cov --workspace --all-features --locked \
+          --lcov --output-path lcov.info
+      shell: bash
+
+    - name: Upload coverage to Codecov
+      if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+      uses: codecov/codecov-action@v7
+      with:
+        token: ${{ inputs.codecov-token }}
+        files: lcov.info
+        flags: agent
+        disable_search: true
+        fail_ci_if_error: false

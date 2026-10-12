@@ -1,0 +1,29 @@
+name: Quality
+description: "Check formatting with cargo fmt and audit dependencies with cargo audit"
+
+runs:
+  using: composite
+  steps:
+    - name: Set up Rust and cache
+      uses: ./.github/actions/setup-rust
+      with:
+        cache-key: quality
+        components: rustfmt
+        cache-target: "false"
+
+    - name: Run cargo fmt
+      run: cargo fmt -- --check
+      shell: bash
+
+    - name: Install cargo audit
+      run: |
+        if [ -x "$HOME/.cargo/bin/cargo-audit" ]; then
+          echo "cargo-audit already installed."
+        else
+          cargo install cargo-audit --locked
+        fi
+      shell: bash
+
+    - name: Run cargo audit
+      run: cargo audit
+      shell: bash

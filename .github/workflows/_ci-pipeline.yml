@@ -26,34 +26,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
-        with:
-          components: rustfmt
-
-      - name: Cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-          key: cargo-quality-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Run cargo fmt
-        run: cargo fmt -- --check
-
-      - name: Install cargo audit
-        run: |
-          if [ -x "$HOME/.cargo/bin/cargo-audit" ]; then
-            echo "cargo-audit already installed."
-          else
-            cargo install cargo-audit --locked
-          fi
-
-      - name: Run cargo audit
-        run: cargo audit
+      - uses: ./.github/actions/quality
 
   # ──────────────────────────────────────────────────────────────────
   # Clippy lint per-OS + PSScriptAnalyzer on Windows.
@@ -66,8 +39,6 @@ jobs:
     name: "🧹 Clippy (${{ matrix.os }})"
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
-    env:
-      IS_MUSL_UBUNTU: ${{ matrix.os == 'ubuntu' }}
     strategy:
       fail-fast: false
       matrix:
@@ -85,47 +56,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Install musl-tools
-        if: env.IS_MUSL_UBUNTU == 'true'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/clippy
         with:
-          targets: ${{ matrix.target }}
-          components: clippy
-
-      - name: Cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: cargo-clippy-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Run cargo clippy
-        run: cargo clippy --target=${{ matrix.target }} -- -D warnings
-
-      - name: Lint PowerShell installer scripts (PSScriptAnalyzer)
-        if: matrix.os == 'windows'
-        shell: pwsh
-        run: ./installer/windows/Run-Lint.ps1
-
-      # Customers run the installers under Windows PowerShell 5.1, CI defaults
-      # to PowerShell 7, and the two do not use the same crypto stack. An
-      # embedded key has to be importable on both.
-      - name: Check release keys (Windows PowerShell 5.1)
-        if: matrix.os == 'windows'
-        shell: powershell
-        run: ./installer/windows/Test-ReleaseKeys.ps1
-
-      - name: Check release keys (PowerShell 7)
-        if: matrix.os == 'windows'
-        shell: pwsh
-        run: ./installer/windows/Test-ReleaseKeys.ps1
+          os: ${{ matrix.os }}
+          target: ${{ matrix.target }}
 
   # ──────────────────────────────────────────────────────────────────
   # Run the test suite on every (os, arch) target. This is the
@@ -136,8 +70,6 @@ jobs:
     name: "🧪 Tests (${{ matrix.os }}-${{ matrix.arch }})"
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 20
-    env:
-      IS_MUSL_UBUNTU: ${{ (matrix.os == 'ubuntu' && contains(matrix.target, 'musl')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -170,28 +102,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Install musl-tools
-        if: env.IS_MUSL_UBUNTU == 'true'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/tests
         with:
-          targets: ${{ matrix.target }}
-
-      - name: Cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: cargo-tests-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Run cargo test
-        run: cargo test --target=${{ matrix.target }} --locked
+          os: ${{ matrix.os }}
+          arch: ${{ matrix.arch }}
+          target: ${{ matrix.target }}
 
   # ──────────────────────────────────────────────────────────────────
   # Code coverage (Linux/x86_64 only). cargo-llvm-cov re-runs the
@@ -210,41 +125,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/coverage
         with:
-          components: llvm-tools-preview
-
-      - name: Cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: cargo-coverage-${{ runner.os }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Install cargo-llvm-cov
-        uses: taiki-e/install-action@v2
-        with:
-          tool: cargo-llvm-cov
-
-      - name: Generate coverage (lcov)
-        run: |
-          cargo llvm-cov --workspace --all-features --locked \
-            --lcov --output-path lcov.info
-
-      - name: Upload coverage to Codecov
-        if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
-        uses: codecov/codecov-action@v7
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-          files: lcov.info
-          flags: agent
-          disable_search: true
-          fail_ci_if_error: false
+          codecov-token: ${{ secrets.CODECOV_TOKEN }}
 
   # ──────────────────────────────────────────────────────────────────
   # Build + test the agent for every (os, arch) target, then stage
@@ -254,8 +137,6 @@ jobs:
     name: "🔨 Build (${{ matrix.os }}-${{ matrix.arch }})"
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
-    env:
-      IS_MUSL_UBUNTU: ${{ (matrix.os == 'ubuntu' && contains(matrix.target, 'musl')) }}
     strategy:
       fail-fast: false
       matrix:
@@ -294,141 +175,12 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Install musl-tools
-        if: env.IS_MUSL_UBUNTU == 'true'
-        run: sudo apt-get update && sudo apt-get install -y musl-tools
-
-      - name: Install NSIS (Windows)
-        if: matrix.os == 'windows'
-        run: choco install -y nsis
-        shell: pwsh
-
-      - name: Set up Rust
-        uses: dtolnay/rust-toolchain@stable
+      - uses: ./.github/actions/build
         with:
-          targets: ${{ matrix.target }}
-
-      - name: Cache
-        uses: actions/cache@v6
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: cargo-build-${{ runner.os }}-${{ matrix.arch }}-${{ hashFiles('Cargo.lock') }}
-
-      - name: Build (release)
-        run: |
-          # Static CRT linkage for Windows is configured in .cargo/config.toml
-          # (target-feature=+crt-static) so VCRUNTIME140.dll is not required at
-          # runtime.
-          #
-          # IMPORTANT: We must NOT set RUSTFLAGS here because it would *override*
-          # (not combine with) the target-specific rustflags in .cargo/config.toml,
-          # effectively dropping +crt-static.  This was the root cause of the
-          # VCRUNTIME140.dll missing error on Windows ARM64.
-          cargo build --target=${{ matrix.target }} --release --locked
-        shell: bash
-
-      - name: Verify no dynamic CRT dependency (Windows)
-        if: matrix.os == 'windows'
-        shell: bash
-        run: |
-          BIN="./target/${{ matrix.target }}/release/openaev-agent.exe"
-          echo "Checking $BIN for VCRUNTIME imports…"
-          # rustup includes llvm-objdump; use it instead of dumpbin which
-          # may not be on PATH (especially on windows-11-arm runners).
-          if rustup run stable llvm-objdump --private-headers "$BIN" \
-             | grep -qi "vcruntime"; then
-            echo "::error::Binary still dynamically links to VCRUNTIME:"
-            rustup run stable llvm-objdump --private-headers "$BIN" | grep -i "vcruntime"
-            exit 1
-          fi
-          echo "✅ No VCRUNTIME dependency found — static CRT linkage confirmed."
-
-      - name: Build agent installers with NSIS (Windows)
-        if: matrix.os == 'windows'
-        shell: pwsh
-        run: |
-          # The .nsi files reference ..\..\target\release\openaev-agent.exe (the
-          # default unflavored release dir). Because we build with --target=...,
-          # the binary actually lives in target/<triple>/release/. Copy it to the
-          # legacy path so makensis can find it.
-          New-Item -ItemType Directory -Force -Path "./target/release" | Out-Null
-          Copy-Item -Force `
-            "./target/${{ matrix.target }}/release/openaev-agent.exe" `
-            "./target/release/openaev-agent.exe"
-
-          $installers = @(
-            "agent-installer.nsi",
-            "agent-installer-service-user.nsi",
-            "agent-installer-session-user.nsi"
-          )
-          foreach ($nsi in $installers) {
-            & "C:\Program Files (x86)\NSIS\Bin\makensis.exe" "./installer/windows/$nsi"
-            if ($LASTEXITCODE -ne 0) {
-              Write-Host "makensis failed for $nsi with exit code $LASTEXITCODE"
-              exit 1
-            }
-          }
-
-      - name: Install cargo cache
-        run: |
-          if command -v cargo-cache &>/dev/null; then
-            echo "cargo-cache already installed."
-          else
-            cargo install cargo-cache --locked
-          fi
-        shell: bash
-
-      - name: Run cargo cache
-        run: cargo cache -a -l || true
-        shell: bash
-
-      # ──────────────────────────────────────────────────────────────
-      # Stage artifacts for downstream promotion.
-      #
-      # Each matrix job uploads a flat directory layout matching the
-      # JFrog destination paths so the downstream workflow only needs
-      # to append the version suffix and PUT each file.
-      #
-      # Layout for the per-target artifact (agent-bin-<os>-<arch>):
-      #   <jfrog_path>/openaev-agent[.exe]               binary
-      #   <jfrog_path>/openaev-agent-installer.exe       (Windows only)
-      #   <jfrog_path>/openaev-agent-installer-service-user.exe
-      #   <jfrog_path>/openaev-agent-installer-session-user.exe
-      # ──────────────────────────────────────────────────────────────
-      - name: Stage binary + Windows installers for upload
-        shell: bash
-        run: |
-          set -euo pipefail
-          STAGE="staging/${{ matrix.jfrog_path }}"
-          mkdir -p "$STAGE"
-
-          if [[ "${{ matrix.os }}" == "windows" ]]; then
-            cp "./target/${{ matrix.target }}/release/openaev-agent.exe" \
-               "$STAGE/openaev-agent.exe"
-            for installer in agent-installer.exe \
-                             agent-installer-service-user.exe \
-                             agent-installer-session-user.exe; do
-              cp "./installer/windows/$installer" "$STAGE/openaev-$installer"
-            done
-          else
-            cp "./target/${{ matrix.target }}/release/openaev-agent" \
-               "$STAGE/openaev-agent"
-          fi
-
-          ls -la "$STAGE"
-
-      - name: Upload binary artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: agent-bin-${{ matrix.os }}-${{ matrix.arch }}
-          path: staging/
-          if-no-files-found: error
-          retention-days: 14
+          arch: ${{ matrix.arch }}
+          jfrog_path: ${{ matrix.jfrog_path }}
+          os: ${{ matrix.os }}
+          target: ${{ matrix.target }}
 
   # ──────────────────────────────────────────────────────────────────
   # Smoke-test the release binaries on every supported OS version,
@@ -480,62 +232,13 @@ jobs:
             artifact: macos-x86_64
             bin: macos/x86_64/openaev-agent
     steps:
-      - name: Download binary artifact
-        uses: actions/download-artifact@v8
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - uses: ./.github/actions/smoke
         with:
-          name: agent-bin-${{ matrix.artifact }}
-          path: smoke
-
-      - name: Run the agent against an unreachable platform
-        shell: bash
-        env:
-          BIN: smoke/${{ matrix.bin }}
-        run: |
-          set -euo pipefail
-          fail() { echo "::error::$1"; exit 1; }
-
-          dir=$(dirname "$BIN")
-          log="$dir/openaev-agent.log"
-          chmod +x "$BIN"
-
-          # The agent reads openaev-agent-config.toml next to its binary.
-          # Nothing listens on port 1, so every API call fails at once.
-          cat > "$dir/openaev-agent-config.toml" <<'EOF'
-          debug = false
-
-          [openaev]
-          url = "http://127.0.0.1:1"
-          token = "smoke-test"
-          unsecured_certificate = false
-          with_proxy = false
-          installation_mode = "session-user"
-          service_name = "OAEVAgentService"
-          tenant_id = "smoke-test"
-          EOF
-
-          # Redirect the output so the background process does not hold
-          # the step's output open if it outlives the kill below.
-          "$BIN" > "$dir/stdout.log" 2>&1 &
-          pid=$!
-          # Generous: on a cold Windows arm64 runner the first registration
-          # attempt can come more than 30 seconds after startup.
-          for _ in $(seq 120); do
-            grep -q 'Fail registering the agent' "$log" 2>/dev/null && break
-            kill -0 "$pid" 2>/dev/null || break
-            sleep 1
-          done
-          alive=true
-          kill -0 "$pid" 2>/dev/null || alive=false
-          kill "$pid" 2>/dev/null || true
-
-          echo "--- stdout/stderr ---"; cat "$dir/stdout.log"
-          echo "--- $log ---"; cat "$log" 2>/dev/null || true
-
-          [[ $alive == true ]] || fail "The agent exited"
-          grep -q 'Starting OpenAEV agent' "$log" || fail "No startup line in $log"
-          grep -q 'Fail registering the agent' "$log" || fail "No registration attempt in $log"
-          [[ -d "$dir/runtimes" && -d "$dir/payloads" ]] || fail "Working directories were not created"
-          echo "✅ Smoke test passed"
+          artifact: ${{ matrix.artifact }}
+          bin: ${{ matrix.bin }}
 
   # ──────────────────────────────────────────────────────────────────
   # Run the agent as a service against a mock platform: install the
@@ -580,21 +283,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Python
-        uses: actions/setup-python@v7
+      - uses: ./.github/actions/service-smoke
         with:
-          python-version: "3.x"
-
-      - name: Download binary artifact
-        uses: actions/download-artifact@v8
-        with:
-          name: agent-bin-${{ matrix.os }}-${{ matrix.arch }}
-          path: smoke
-
-      # Bash puts Git's openssl on PATH on Windows too; the mock signs with it.
-      - name: Install, upgrade to this build and launch an implant
-        shell: bash
-        run: python .github/scripts/agent-service-smoke.py smoke/${{ matrix.jfrog_path }}
+          arch: ${{ matrix.arch }}
+          jfrog_path: ${{ matrix.jfrog_path }}
+          os: ${{ matrix.os }}
 
   # ──────────────────────────────────────────────────────────────────
   # OS-level installer / upgrade scripts (arch-independent).
@@ -609,47 +302,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Stage scripts
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p staging/linux staging/macos staging/windows
-
-          # Linux / macOS shell scripts
-          for os in linux macos; do
-            for script in \
-              agent-installer.sh \
-              agent-upgrade.sh \
-              agent-installer-session-user.sh \
-              agent-upgrade-session-user.sh \
-              agent-installer-service-user.sh \
-              agent-upgrade-service-user.sh; do
-              cp "./installer/${os}/${script}" \
-                 "staging/${os}/openaev-${script%.sh}.sh"
-            done
-          done
-
-          # Windows PowerShell scripts
-          for script in \
-            agent-installer.ps1 \
-            agent-upgrade.ps1 \
-            agent-installer-session-user.ps1 \
-            agent-upgrade-session-user.ps1 \
-            agent-installer-service-user.ps1 \
-            agent-upgrade-service-user.ps1; do
-            cp "./installer/windows/${script}" \
-               "staging/windows/openaev-${script%.ps1}.ps1"
-          done
-
-          find staging -type f
-
-      - name: Upload scripts artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: agent-scripts
-          path: staging/
-          if-no-files-found: error
-          retention-days: 14
+      - uses: ./.github/actions/package-scripts
 
   # ──────────────────────────────────────────────────────────────────
   # The OS trust store is consulted for HTTPS: a private CA trusted by
@@ -673,59 +326,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Rust and cache
-        uses: ./.github/actions/setup-rust
+      - uses: ./.github/actions/os-trust-store
         with:
-          cache-key: os-trust
-
-      - name: Generate a private CA and a 127.0.0.1 certificate
-        shell: bash
-        # Git Bash rewrites the leading slash of -subj into a Windows path
-        env:
-          MSYS_NO_PATHCONV: 1
-          MSYS2_ARG_CONV_EXCL: "*"
-        run: |
-          openssl req -x509 -newkey rsa:2048 -sha256 -days 1 -nodes \
-            -keyout ca.key -out ca.pem -subj "/CN=OpenAEV OS trust test CA" \
-            -addext "basicConstraints=critical,CA:TRUE" \
-            -addext "keyUsage=critical,keyCertSign,cRLSign"
-          printf 'subjectAltName=DNS:localhost,IP:127.0.0.1\nbasicConstraints=critical,CA:FALSE\nextendedKeyUsage=serverAuth\n' > leaf.ext
-          openssl req -newkey rsa:2048 -nodes -keyout leaf.key -out leaf.csr -subj "/CN=localhost"
-          openssl x509 -req -in leaf.csr -CA ca.pem -CAkey ca.key -CAcreateserial \
-            -out leaf.pem -days 1 -sha256 -extfile leaf.ext
-          openssl x509 -in leaf.pem -noout -subject -issuer -ext subjectAltName
-
-      - name: Trust the CA (linux)
-        if: matrix.os == 'ubuntu'
-        run: |
-          sudo cp ca.pem /usr/local/share/ca-certificates/openaev-os-trust-test-ca.crt
-          sudo update-ca-certificates
-
-      - name: Trust the CA (macos)
-        if: matrix.os == 'macos'
-        run: sudo security add-trusted-cert -d -r trustRoot -k /Library/Keychains/System.keychain ca.pem
-
-      - name: Trust the CA (windows)
-        if: matrix.os == 'windows'
-        shell: pwsh
-        run: certutil -addstore -f Root ca.pem
-
-      - name: Serve HTTPS and run the OS trust store test
-        shell: bash
-        env:
-          OAEV_OS_TRUST_URL: https://127.0.0.1:8443
-        run: |
-          openssl s_server -accept 8443 -cert leaf.pem -key leaf.key -www -quiet &
-          server=$!
-          for _ in $(seq 1 30); do
-            if (exec 3<>/dev/tcp/127.0.0.1/8443) 2>/dev/null; then break; fi
-            sleep 1
-          done
-          set +e
-          cargo test --locked test_os_trust_store_is_consulted -- --ignored --nocapture
-          status=$?
-          kill "$server" 2>/dev/null
-          exit $status
+          os: ${{ matrix.os }}
 
   # ──────────────────────────────────────────────────────────────────
   # Pipeline gate

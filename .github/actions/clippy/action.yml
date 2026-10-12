@@ -1,0 +1,47 @@
+name: Clippy
+description: "Lint the agent with clippy for one target, plus the Windows installer scripts on Windows"
+
+inputs:
+  os:
+    description: "Runner OS family: ubuntu, windows or macos"
+    required: true
+  target:
+    description: "Rust target triple to lint"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install musl-tools
+      if: inputs.os == 'ubuntu'
+      run: sudo apt-get update && sudo apt-get install -y musl-tools
+      shell: bash
+
+    - name: Set up Rust and cache
+      uses: ./.github/actions/setup-rust
+      with:
+        cache-key: clippy
+        targets: ${{ inputs.target }}
+        components: clippy
+
+    - name: Run cargo clippy
+      run: cargo clippy --target=${{ inputs.target }} -- -D warnings
+      shell: bash
+
+    - name: Lint PowerShell installer scripts (PSScriptAnalyzer)
+      if: inputs.os == 'windows'
+      shell: pwsh
+      run: ./installer/windows/Run-Lint.ps1
+
+    # Customers run the installers under Windows PowerShell 5.1, CI defaults
+    # to PowerShell 7, and the two do not use the same crypto stack. An
+    # embedded key has to be importable on both.
+    - name: Check release keys (Windows PowerShell 5.1)
+      if: inputs.os == 'windows'
+      shell: powershell
+      run: ./installer/windows/Test-ReleaseKeys.ps1
+
+    - name: Check release keys (PowerShell 7)
+      if: inputs.os == 'windows'
+      shell: pwsh
+      run: ./installer/windows/Test-ReleaseKeys.ps1
