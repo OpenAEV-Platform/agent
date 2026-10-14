@@ -3,6 +3,7 @@ use serde::Deserialize;
 use std::env;
 use std::fmt;
 use std::path::PathBuf;
+use zeroize::Zeroizing;
 
 pub const ENV_PRODUCTION: &str = "production";
 const ENV_PRODUCTION_CONFIG_FILE: &str = "openaev-agent-config";
@@ -12,7 +13,10 @@ const ENV_PRODUCTION_CONFIG_FILE: &str = "openaev-agent-config";
 pub struct OpenAEV {
     pub url: String,
     // Optional: once moved to the OS secret store, the token is no longer in the config.
-    pub token: Option<String>,
+    // Zeroizing from deserialization on, so that every path that drops it wipes it. The
+    // copies the config crate makes while loading the file are not: none are left once
+    // the token has moved to the OS secret store.
+    pub token: Option<Zeroizing<String>>,
     pub unsecured_certificate: bool,
     pub with_proxy: bool,
     pub installation_mode: String,
