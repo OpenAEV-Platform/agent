@@ -357,6 +357,43 @@ Function nsDialogsPageLeave
   ${EndIf}
 FunctionEnd
 
+; CreateProtectedFile
+;   Creates a new file with the given security descriptor (SDDL) and returns a
+;   write handle for FileWrite and FileClose, or -1 on failure (including when the
+;   file already exists). The ACL is set by the call that creates the file, and
+;   the handle is not shared: no other process can open the file before it is
+;   closed. Creating the file first and restricting it afterwards would leave a
+;   window where a handle opened with the folder's ACL keeps reading what is
+;   written later: changing an ACL does not revoke open handles.
+; Usage:
+;   Push <path>
+;   Push <SDDL>
+;   Call CreateProtectedFile
+;   Pop <handle>
+Function CreateProtectedFile
+  Exch $0 ; SDDL
+  Exch
+  Exch $1 ; path
+  Push $2
+  Push $3
+  StrCpy $3 -1
+
+  System::Call 'advapi32::ConvertStringSecurityDescriptorToSecurityDescriptorW(w r0, i 1, *p .r2, p 0) i .r0' ; SDDL_REVISION_1
+  ${If} $0 != 0
+    System::Call '*(&l4, p r2, i 0) p .r0' ; SECURITY_ATTRIBUTES
+    ; GENERIC_WRITE, no sharing, CREATE_NEW, FILE_ATTRIBUTE_NORMAL
+    System::Call 'kernel32::CreateFileW(w r1, i 0x40000000, i 0, p r0, i 1, i 0x80, p 0) p .r3'
+    System::Free $0
+    System::Call 'kernel32::LocalFree(p r2)'
+  ${EndIf}
+
+  StrCpy $0 $3
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
+
 section "install"
   # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
   setOutPath $INSTDIR
@@ -372,33 +409,25 @@ section "install"
   file "openaev.ico"
   
   ; The config holds the token. Without an explicit ACL it inherits the folder's,
-  ; which lets every local user read it. Restrict it to SYSTEM (the service account)
-  ; and Administrators while it is still empty, so the token never sits in a
-  ; readable file. Overwriting the file later keeps this ACL. Well-known SIDs, not
-  ; names: account names are localized. icacls by full path: a bare name is looked
-  ; up in the installer's folder first.
-  ; Delete the previous config first: icacls only replaces the entries it names, so
-  ; any other entry (and the owner) of an existing file would survive a reinstall.
+  ; which lets every local user read it. Only SYSTEM (the service account) and
+  ; Administrators get access. Well-known SIDs, not names: account names are localized.
+  ; Delete the previous config first, so its ACL and owner are never reused: the new
+  ; file is created from scratch below.
   ClearErrors
   Delete "$INSTDIR\openaev-agent-config.toml"
   ${If} ${Errors}
     Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
-  ClearErrors
-  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
-  FileClose $4
-  ${If} ${Errors}
+  Push "$INSTDIR\openaev-agent-config.toml"
+  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
+  Call CreateProtectedFile
+  Pop $4
+  ${If} $4 == -1
     Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
-  nsExec::ExecToLog '"$SYSDIR\icacls.exe" "$INSTDIR\openaev-agent-config.toml" /inheritance:r /grant:r *S-1-5-18:F *S-1-5-32-544:F'
-  Pop $0
-  ${If} $0 != 0
-    Abort "Unable to restrict access to $INSTDIR\openaev-agent-config.toml (icacls exit code $0)"
-  ${EndIf}
 
-  ; write agent config file (FileOpen and FileWrite only set the error flag on failure)
+  ; write agent config file (FileWrite only sets the error flag on failure)
   ClearErrors
-  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "[openaev]$\r$\n"
     FileWrite $4 "url = $\"$ConfigURL$\"$\r$\n"
