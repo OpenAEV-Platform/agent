@@ -25,7 +25,6 @@ use crate::process::agent_job;
 use crate::process::{agent_cleanup, keep_alive};
 use crate::windows::service::service_stub;
 use tracing_subscriber::filter::LevelFilter;
-use zeroize::Zeroizing;
 
 pub static THREADS_CONTROL: AtomicBool = AtomicBool::new(true);
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -66,7 +65,7 @@ fn agent_start(
     is_service: bool,
 ) -> Result<Vec<JoinHandle<()>>, Error> {
     let url = settings_data.openaev.url;
-    let secrets = secrets::open(settings_data.openaev.token.take().map(Zeroizing::new));
+    let secrets = secrets::open(settings_data.openaev.token.take());
     let unsecured_certificate = settings_data.openaev.unsecured_certificate;
     let with_proxy = settings_data.openaev.with_proxy;
     let installation_mode = settings_data.openaev.installation_mode;

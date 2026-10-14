@@ -2,11 +2,14 @@ const TOKEN: &str = "token";
 
 #[cfg(test)]
 mod tests {
-    use crate::api::{Client, AUTHORIZATION_HEADER};
+    use crate::api::{bearer_header, Client, AUTHORIZATION_HEADER};
     use crate::tests::api::client::TOKEN;
     use crate::tests::secrets::{FailingStore, MemoryStore};
+    use bytes::Bytes;
     use mockito;
+    use reqwest::header::HeaderValue;
     use std::env;
+    use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
 
     #[test]
@@ -176,5 +179,51 @@ mod tests {
             client.get("").unwrap().send().is_ok(),
             "Client should trust a CA present only in the OS trust store"
         );
+    }
+
+    #[test]
+    fn test_bearer_header_holds_the_token_and_is_sensitive() {
+        // -- EXECUTE --
+        let value = bearer_header(TOKEN.as_bytes()).unwrap();
+
+        // -- ASSERT --
+        assert_eq!(value.as_bytes(), format!("Bearer {TOKEN}").as_bytes());
+        assert!(value.is_sensitive());
+    }
+
+    /// Stands in for the `Zeroizing` buffer: records when it is dropped, so wiped.
+    struct DropFlag(Vec<u8>, Arc<AtomicBool>);
+
+    impl AsRef<[u8]> for DropFlag {
+        fn as_ref(&self) -> &[u8] {
+            &self.0
+        }
+    }
+
+    impl Drop for DropFlag {
+        fn drop(&mut self) {
+            self.1.store(true, Ordering::SeqCst);
+        }
+    }
+
+    #[test]
+    fn test_header_value_keeps_the_owned_buffer_until_its_last_copy_is_dropped() {
+        // -- PREPARE --
+        let dropped = Arc::new(AtomicBool::new(false));
+        let bytes = Bytes::from_owner(DropFlag(b"Bearer token".to_vec(), dropped.clone()));
+        let buffer = bytes.as_ptr();
+
+        // -- EXECUTE --
+        let value = HeaderValue::from_maybe_shared(bytes).unwrap();
+        let copy = value.clone();
+
+        // -- ASSERT --
+        // A copy of the bytes would never be wiped: the header must point at the buffer.
+        assert_eq!(value.as_bytes().as_ptr(), buffer);
+        assert_eq!(copy.as_bytes().as_ptr(), buffer);
+        drop(value);
+        assert!(!dropped.load(Ordering::SeqCst), "a copy still uses it");
+        drop(copy);
+        assert!(dropped.load(Ordering::SeqCst), "wiped with its last copy");
     }
 }
