@@ -29,7 +29,6 @@ impl SecretStore for ConfigStore {
         settings
             .openaev
             .token
-            .map(Zeroizing::new)
             .ok_or_else(|| Error::Internal("no token in the agent config".to_string()))
     }
 
