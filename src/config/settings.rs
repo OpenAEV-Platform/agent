@@ -2,6 +2,7 @@ use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
 use std::env;
 use std::fmt;
+use std::path::{Path, PathBuf};
 use zeroize::Zeroizing;
 
 const ENV_PRODUCTION: &str = "production";
@@ -80,25 +81,39 @@ impl Settings {
     }
 
     pub fn new() -> Result<Self, ConfigError> {
-        let run_mode = Self::mode();
-        let config = Config::builder().add_source(Environment::with_prefix("openaev"));
-        if run_mode == ENV_PRODUCTION {
+        match Self::config_file() {
+            Some(config_file) => Self::from_file(&config_file),
+            None => {
+                let run_mode = Self::mode();
+                Config::builder()
+                    .add_source(Environment::with_prefix("openaev"))
+                    .add_source(File::with_name("config/default"))
+                    .add_source(File::with_name(&format!("config/{run_mode}")).required(false))
+                    .build()?
+                    .try_deserialize()
+            }
+        }
+    }
+
+    /// The config file the installers write next to the executable, without its extension.
+    /// `None` in development, where the settings come from `config/`.
+    pub fn config_file() -> Option<PathBuf> {
+        (Self::mode() == ENV_PRODUCTION).then(|| {
             // Get the current executable path
             let current_exe_patch = env::current_exe().unwrap();
             let parent_path = current_exe_patch.parent().unwrap();
             // Join the expected config file with the parent
-            let config_file = parent_path.join(ENV_PRODUCTION_CONFIG_FILE);
-            let config_path = config_file.display();
-            config
-                .add_source(File::with_name(&config_path.to_string()).required(true))
-                .build()?
-                .try_deserialize()
-        } else {
-            config
-                .add_source(File::with_name("config/default"))
-                .add_source(File::with_name(&format!("config/{run_mode}")).required(false))
-                .build()?
-                .try_deserialize()
-        }
+            parent_path.join(ENV_PRODUCTION_CONFIG_FILE)
+        })
+    }
+
+    /// Loads the settings the way production does, from `config_file` (without its
+    /// extension).
+    pub fn from_file(config_file: &Path) -> Result<Self, ConfigError> {
+        Config::builder()
+            .add_source(Environment::with_prefix("openaev"))
+            .add_source(File::with_name(&config_file.display().to_string()).required(true))
+            .build()?
+            .try_deserialize()
     }
 }

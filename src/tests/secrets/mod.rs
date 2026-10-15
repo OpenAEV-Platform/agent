@@ -3,6 +3,10 @@ mod config_store_tests;
 use crate::common::error_model::Error;
 use crate::secrets::SecretStore;
 use std::collections::HashMap;
+use std::env;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use zeroize::Zeroizing;
 
@@ -46,4 +50,18 @@ impl SecretStore for FailingStore {
     fn get(&self, name: &str) -> Result<Zeroizing<String>, Error> {
         Err(Error::Internal(format!("no secret named {name}")))
     }
+}
+
+/// A fresh, empty directory for one test, so that tests running in parallel never share a
+/// file.
+pub fn test_dir(name: &str) -> PathBuf {
+    static COUNTER: AtomicUsize = AtomicUsize::new(0);
+    let dir = env::temp_dir().join(format!(
+        "openaev-agent-{name}-{}-{}",
+        std::process::id(),
+        COUNTER.fetch_add(1, Ordering::SeqCst)
+    ));
+    let _ = fs::remove_dir_all(&dir);
+    fs::create_dir_all(&dir).unwrap();
+    dir
 }
