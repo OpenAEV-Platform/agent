@@ -9,6 +9,7 @@ mod config_store;
 pub use config_store::ConfigStore;
 
 use crate::common::error_model::Error;
+use crate::config::settings::Settings;
 use std::sync::Arc;
 use zeroize::Zeroizing;
 
@@ -22,5 +23,5 @@ pub trait SecretStore: Send + Sync {
 
 /// Opens the store the agent reads its token from.
 pub fn open() -> Arc<dyn SecretStore> {
-    Arc::new(ConfigStore)
+    Arc::new(ConfigStore::new(Settings::config_file()))
 }
