@@ -398,26 +398,29 @@ section "install"
   # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
   setOutPath $INSTDIR
 
-  ;stopping existing service
+  ; 1. Stop the existing service
   ExecWait 'sc stop $ServiceName' $0
 
-  ;deleting existing service
+  ; 2. Delete the existing service
   ExecWait 'sc delete $ServiceName' $0
 
+  ; 3. Copy the agent binary and icon
   # Files added here should be removed by the uninstaller (see section "uninstall")
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
-  
-  ; The config holds the token. Without an explicit ACL it inherits the folder's,
-  ; which lets every local user read it. Only SYSTEM (the service account) and
-  ; Administrators get access. Well-known SIDs, not names: account names are localized.
-  ; Delete the previous config first, so its ACL and owner are never reused: the new
-  ; file is created from scratch below.
+
+  ; 4. Delete the previous config, so its ACL and owner are never reused: the new
+  ;    file is created from scratch in step 5.
   ClearErrors
   Delete "$INSTDIR\openaev-agent-config.toml"
   ${If} ${Errors}
     Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
+
+  ; 5. Create the config with a restricted ACL.
+  ;    The config holds the token. Without an explicit ACL it inherits the folder's,
+  ;    which lets every local user read it. Only SYSTEM (the service account) and
+  ;    Administrators get access. Well-known SIDs, not names: account names are localized.
   Push "$INSTDIR\openaev-agent-config.toml"
   Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
   Call CreateProtectedFile
@@ -426,7 +429,7 @@ section "install"
     Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
-  ; write agent config file (FileWrite only sets the error flag on failure)
+  ; 6. Write the agent config (FileWrite only sets the error flag on failure)
   ClearErrors
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "[openaev]$\r$\n"
@@ -444,15 +447,16 @@ section "install"
     Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
-  ; register windows service
+  ; 7. Register the Windows service
   ExecWait 'sc create $ServiceName error="severe" displayname="${displayName}" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"'
 
-  ; configure restart in case of failure
+  ; 8. Configure restart in case of failure
   ExecWait 'sc failure $ServiceName reset= 0 actions= restart/60000/restart/60000/restart/60000'
 
-  ; start the service
+  ; 9. Start the service
   ExecWait 'sc start $ServiceName'
 
+  ; 10. Write the uninstaller
   # Uninstaller - See function un.onInit and section "uninstall" for configuration
   writeUninstaller "$INSTDIR\uninstall.exe"
 
@@ -576,12 +580,12 @@ function un.onInit
 functionEnd
 
 section "uninstall"
-  ;stopping existing service
+  ; 1. Stop the service
   ExecWait 'sc stop $ServiceName' $0
 
-  ; unregister service
+  ; 2. Unregister the service
   ExecWait 'sc delete $ServiceName'
 
-  ; delete everything
+  ; 3. Delete the install directory
 	RMDir /r $INSTDIR
 sectionEnd

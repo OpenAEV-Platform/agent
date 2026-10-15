@@ -488,10 +488,10 @@ section "install"
   # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
   setOutPath $INSTDIR
 
-  ; Retrieve the SID for $ConfigUser
-  ; (needed both for the config ACL below and for the service permissions)
-  ; Before stopping the existing service: an abort here must leave a working
-  ; installation in place.
+  ; 1. Resolve the SID of $ConfigUser
+  ;    (needed both for the config ACL in step 7 and for the service permissions in step 11)
+  ;    Before stopping the existing service: an abort here must leave a working
+  ;    installation in place.
   Push $ConfigUser
   Call ResolveAccountSid
   Pop $UserSID
@@ -501,36 +501,39 @@ section "install"
     Abort "Unable to resolve the SID of $ConfigUser"
   ${EndIf}
 
-  ; The lookup also resolves groups and aliases (e.g. BUILTIN\Users): the service
-  ; cannot run as one, and granting it read access would expose the token to every
-  ; member. Only user accounts are supported: the service is created with a
-  ; password, which virtual accounts (NT SERVICE\...), managed service accounts and
-  ; the built-in service accounts do not take.
+  ; 2. Check that $ConfigUser is a user account.
+  ;    The lookup also resolves groups and aliases (e.g. BUILTIN\Users): the service
+  ;    cannot run as one, and granting it read access would expose the token to every
+  ;    member. Only user accounts are supported: the service is created with a
+  ;    password, which virtual accounts (NT SERVICE\...), managed service accounts and
+  ;    the built-in service accounts do not take.
   ${If} $UserSidType != 1 ; SidTypeUser
     Abort "$ConfigUser is not a user account (SID_NAME_USE $UserSidType)"
   ${EndIf}
 
-  ;stopping existing service
+  ; 3. Stop the existing service
   ExecWait 'sc stop $ServiceName' $0
 
-  ;deleting existing service
+  ; 4. Delete the existing service
   ExecWait 'sc delete $ServiceName' $0
 
-
+  ; 5. Copy the agent binary and icon
   # Files added here should be removed by the uninstaller (see section "uninstall")
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
 
-  ; The config holds the token. Without an explicit ACL it inherits the folder's,
-  ; which lets every local user read it. Only SYSTEM, Administrators and read access
-  ; for the service account. Well-known SIDs, not names: account names are localized.
-  ; Delete the previous config first, so its ACL and owner are never reused: the new
-  ; file is created from scratch below.
+  ; 6. Delete the previous config, so its ACL and owner are never reused: the new
+  ;    file is created from scratch in step 7.
   ClearErrors
   Delete "$INSTDIR\openaev-agent-config.toml"
   ${If} ${Errors}
     Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
+
+  ; 7. Create the config with a restricted ACL.
+  ;    The config holds the token. Without an explicit ACL it inherits the folder's,
+  ;    which lets every local user read it. Only SYSTEM, Administrators and read access
+  ;    for the service account. Well-known SIDs, not names: account names are localized.
   Push "$INSTDIR\openaev-agent-config.toml"
   Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;$UserSID)"
   Call CreateProtectedFile
@@ -539,7 +542,7 @@ section "install"
     Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
-  ; write agent config file (FileWrite only sets the error flag on failure)
+  ; 8. Write the agent config (FileWrite only sets the error flag on failure)
   ClearErrors
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "$\r$\n"
@@ -558,13 +561,13 @@ section "install"
     Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
-  ; register windows service
+  ; 9. Register the Windows service, running as $ConfigUser
   ExecWait 'sc create $ServiceName error="severe" displayname="$DisplayName" obj="$ConfigUser" password="$ConfigPassword" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"' $R0
 
-  ; configure restart in case of failure
+  ; 10. Configure restart in case of failure
   ExecWait 'sc failure $ServiceName reset= 0 actions= restart/60000/restart/60000/restart/60000'
 
-  ;------ Add the permissions to start/stop service for the user ($UserSID retrieved above)
+  ; 11. Allow $ConfigUser to start/stop the service ($UserSID resolved in step 1)
 
   ; Get Existing permission and Add permission for the user to stop/start the service
   nsExec::ExecToStack "cmd /c sc sdshow $ServiceName"
@@ -582,10 +585,10 @@ section "install"
   ;run the command to add the permission
   ExecWait 'cmd /c sc sdset "$ServiceName" "D:(A;;RPWPCR;;;$UserSID)$Perm"' $R0
 
-
-  ; start the service
+  ; 12. Start the service
   ExecWait 'sc start $ServiceName' $R0
 
+  ; 13. Write the uninstaller
   # Uninstaller - See function un.onInit and section "uninstall" for configuration
   writeUninstaller "$INSTDIR\uninstall.exe"
 sectionEnd
@@ -708,11 +711,13 @@ Function un.onInit
 FunctionEnd
 
 section "uninstall"
-  ; unregister service
+  ; 1. Stop the service
   ExecWait 'sc stop $ServiceName'
+
+  ; 2. Unregister the service
   ExecWait 'sc delete $ServiceName'
 
-  ; delete everything
+  ; 3. Delete the install directory
   RMDir /r $INSTDIR
 sectionEnd
 

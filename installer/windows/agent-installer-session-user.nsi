@@ -502,14 +502,16 @@ section "install"
 
   # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
   setOutPath $INSTDIR
+
+  ; 1. Copy the agent binary and icon
   # Files added here should be removed by the uninstaller (see section "uninstall")
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
 
-  ; Retrieve the SID of the user running this installer (the agent runs as this user).
-  ; whoami reads it from the process token: no PowerShell (which AppLocker or
-  ; Constrained Language Mode can block) and no domain controller needed.
-  ; Output: "domain\user","S-1-..."
+  ; 2. Resolve the SID of the user running this installer (the agent runs as this user).
+  ;    whoami reads it from the process token: no PowerShell (which AppLocker or
+  ;    Constrained Language Mode can block) and no domain controller needed.
+  ;    Output: "domain\user","S-1-..."
   nsExec::ExecToStack '"$SYSDIR\whoami.exe" /user /fo csv /nh'
   Pop $R0    ; Pop the exit code
   Pop $UserSID  ; Pop the output
@@ -530,18 +532,20 @@ section "install"
     Abort "Unable to resolve the SID of the current user"
   ${EndIf}
 
-  ; The config holds the token. Without an explicit ACL it inherits the folder's,
-  ; which lets every local user read it. Only SYSTEM, Administrators and the current
-  ; user get access. The user keeps full control: the session-user upgrade reruns
-  ; this installer as that user and rewrites the file. Well-known SIDs, not names:
-  ; account names are localized.
-  ; Delete the previous config first, so its ACL and owner are never reused: the new
-  ; file is created from scratch below.
+  ; 3. Delete the previous config, so its ACL and owner are never reused: the new
+  ;    file is created from scratch in step 4.
   ClearErrors
   Delete "$INSTDIR\openaev-agent-config.toml"
   ${If} ${Errors}
     Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
+
+  ; 4. Create the config with a restricted ACL.
+  ;    The config holds the token. Without an explicit ACL it inherits the folder's,
+  ;    which lets every local user read it. Only SYSTEM, Administrators and the current
+  ;    user get access. The user keeps full control: the session-user upgrade reruns
+  ;    this installer as that user and rewrites the file. Well-known SIDs, not names:
+  ;    account names are localized.
   Push "$INSTDIR\openaev-agent-config.toml"
   Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;$UserSID)"
   Call CreateProtectedFile
@@ -550,7 +554,7 @@ section "install"
     Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
-  ; write agent config file (FileWrite only sets the error flag on failure)
+  ; 5. Write the agent config (FileWrite only sets the error flag on failure)
   ClearErrors
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "$\r$\n"
@@ -569,12 +573,13 @@ section "install"
     Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
-  ; write agent start file to launch the agent without a powershell window displayed
+  ; 6. Write the agent start file to launch the agent without a powershell window displayed
   FileOpen $4 "$INSTDIR\openaev_agent_start.ps1" w
     FileWrite $4 "Start-Process -FilePath '$INSTDIR\openaev-agent.exe' -WindowStyle Hidden"
   FileClose $4
 
-  ;admin -> use a scheduled task, non admin -> write in the registry and create a script to launch the agent to create a startup app
+  ; 7. Register the agent to start at logon, then start it:
+  ;    admin -> use a scheduled task, non admin -> write in the registry and create a script to launch the agent to create a startup app
   ${If} $ConfigWithAdminPrivilege == "true"
     ; Stop the scheduled task
     ExecWait 'schtasks /End /TN "$AgentName"' $0
@@ -601,6 +606,7 @@ section "install"
     nsExec::ExecToStack "powershell.exe -ExecutionPolicy Bypass -WindowStyle hidden -File $INSTDIR\openaev_agent_start.ps1"
   ${EndIf}
 
+  ; 8. Write the uninstaller
   # Uninstaller - See function un.onInit and section "uninstall" for configuration
   writeUninstaller "$INSTDIR\uninstall.exe"
 sectionEnd
@@ -753,11 +759,14 @@ done:
 FunctionEnd
  
 section "uninstall"
+   ; 1. Detect how the agent was installed: an agent name containing "Administrator"
+   ;    was installed with admin privileges (scheduled task), otherwise with a registry Run key
    Push $AgentName
    Push "Administrator"
    Call un.StrContains
    Pop $R0
 
+   ; 2. Stop the agent and remove its start at logon
    ${If} $R0 != ""
     !insertmacro VerifyUserIsAdmin
      ; Stop the scheduled task
@@ -775,9 +784,9 @@ section "uninstall"
      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "$AgentName"
    ${EndIf}
 
-  ; Wait 1s to allow the task to fully end before deleting the exe
+  ; 3. Wait 1s to allow the task to fully end before deleting the exe
   Sleep 1000
 
-  ; delete everything
+  ; 4. Delete the install directory
   RMDir /r $INSTDIR
 sectionEnd
