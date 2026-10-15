@@ -12,7 +12,9 @@ impl SecretStore for ConfigStore {
         if name != TOKEN {
             return Err(Error::Internal(format!("no secret named {name}")));
         }
-        let settings = Settings::new().map_err(|err| Error::Internal(err.to_string()))?;
+        let settings = Settings::new().map_err(|_| {
+            Error::Internal("Unable to read token from agent configuration".to_string())
+        })?;
         Ok(settings.openaev.token)
     }
 }
