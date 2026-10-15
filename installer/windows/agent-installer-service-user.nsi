@@ -495,7 +495,7 @@ section "install"
   Call Trim
   Pop $UserSID
 
-  ; Get Existing permssion and Add permission for the user to stop/start the service
+  ; Get Existing permission and Add permission for the user to stop/start the service
   nsExec::ExecToStack "cmd /c sc sdshow $ServiceName"
   Pop $R0    ; Pop the exit code
   Pop $Perm  ; Pop the perm

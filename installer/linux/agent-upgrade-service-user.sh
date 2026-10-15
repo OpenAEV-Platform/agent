@@ -124,7 +124,6 @@ architecture=$(run uname -m)
 systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 
 os=$(uname | tr '[:upper:]' '[:lower:]')
-session_name="${OPENAEV_SERVICE_NAME}"
 tenant_id="${OPENAEV_TENANT_ID}"
 
 # Check if OPENAEV_INSTALL_DIR is an absolute path (starts with /)
@@ -186,12 +185,23 @@ url = "${OPENAEV_URL}"
 token = "${OPENAEV_TOKEN}"
 unsecured_certificate = "${OPENAEV_UNSECURED_CERTIFICATE}"
 with_proxy = "${OPENAEV_WITH_PROXY}"
-installation_mode = "session-user"
+installation_mode = "service-user"
 service_name = "${OPENAEV_SERVICE_NAME}"
 tenant_id = "${OPENAEV_TENANT_ID}"
 EOF
 
-log "03. Restarting the service"
-run systemctl --user restart ${session_name}
+# Restarting the system unit needs root, which this script does not have.
+# Killing our own agent is allowed, and Restart=always brings it back with
+# the new binary.
+log "03. Kill the process of the existing service"
+agent_path="$(cd "${install_dir}" && pwd -P)/openaev-agent" || die "Unable to resolve ${install_dir}"
+killed=0
+for pid in $(pgrep -u "$(id -u)" -x openaev-agent); do
+  exe=$(readlink "/proc/${pid}/exe" 2>/dev/null) || continue
+  if [ "${exe% (deleted)}" = "${agent_path}" ]; then
+    kill -9 "${pid}" && killed=1
+  fi
+done
+[ "${killed}" = 1 ] || die "Error while killing the process of the OpenAEV agent service: no running agent found for ${agent_path}"
 
-log "OpenAEV Agent Session User started."
+log "The OpenAEV agent process was stopped, the service will restart automatically"

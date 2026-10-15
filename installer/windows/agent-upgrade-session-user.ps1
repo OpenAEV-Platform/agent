@@ -311,7 +311,7 @@ $AgentPath = $AgentPath -replace "openaev", "openbas"
 $AgentPath = $AgentPath -replace "OAEV", "OBAS"
 Get-Process | Where-Object { $_.Path -eq "$AgentPath" } | Stop-Process -Force;
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"
-$UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "OAEV", "OBAS"
+$UninstallDir = "$UninstallDir" -replace "OAEV", "OBAS"
 Remove-Item -Force "${UninstallDir}/openbas.ico"
 Remove-Item -Force "${UninstallDir}/openbas_agent_kill.ps1"
 Remove-Item -Force "${UninstallDir}/openbas_agent_start.ps1"

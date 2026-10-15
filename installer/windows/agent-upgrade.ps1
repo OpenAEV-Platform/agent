@@ -278,7 +278,7 @@ Invoke-WebRequest -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/in
 ./openaev-installer.ps1
 sc.exe stop "${OPENAEV_SERVICE_NAME}"
 $UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "openaev", "openbas"
-$UninstallDir = "${OPENAEV_INSTALL_DIR}" -replace "OAEV", "OBAS"
+$UninstallDir = "$UninstallDir" -replace "OAEV", "OBAS"
 Remove-Item -Force "${UninstallDir}/openbas.ico"
 Remove-Item -Force "${UninstallDir}/openbas_agent_kill.ps1"
 Remove-Item -Force "${UninstallDir}/openbas-agent.exe"

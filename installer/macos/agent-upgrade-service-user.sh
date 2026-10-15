@@ -174,6 +174,9 @@ service_name = "${OPENAEV_SERVICE_NAME}"
 tenant_id = "${OPENAEV_TENANT_ID}"
 EOF
 
+# Restarting the system unit needs root, which this script does not have.
+# Killing our own agent is allowed, and Restart=always brings it back with
+# the new binary.
 echo "03. Kill the process of the existing service"
 (pkill -9 -f "${install_dir}/openaev-agent") || (echo "Error while killing the process of the openaev agent service" >&2 && exit 1)
 echo "The OpenAEV agent process was stopped, the service will automatically restart in 60 seconds"
