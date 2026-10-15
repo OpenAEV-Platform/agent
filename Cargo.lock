@@ -1030,7 +1030,7 @@ name = "openaev-agent"
 version = "3.261014.1"
 dependencies = [
     "bytes",
- "config",
+    "config",
     "filetime",
     "hostname",
     "log",
@@ -1041,14 +1041,12 @@ dependencies = [
     "rolling-file",
     "serde",
     "serde_json",
-    "toml_edit",
- "tracing-appender",
+    "tracing-appender",
     "tracing-subscriber",
     "webpki-root-certs",
     "windows-service",
     "windows-service-detector",
- "windows-sys 0.61.2",
- "zeroize",
+    "zeroize",
 ]
 
 [[package]]
@@ -1902,19 +1900,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "toml_edit"
-version = "0.25.17+spec-1.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e3641d5bbb5349a79e1020a242d251efbc546ad8048d133958323ce9c40a9c9c"
-dependencies = [
- "indexmap",
- "toml_datetime",
- "toml_parser",
- "toml_writer",
- "winnow",
-]
-
-[[package]]
 name = "toml_parser"
 version = "1.1.5+spec-1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2590,7 +2575,7 @@ version = "1.9.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e13084392c5e4bc371903e2935a5eaeed24905a7511356b883835e18a78f6879"
 dependencies = [
- "serde",
+    "serde",
 ]
 
 [[package]]

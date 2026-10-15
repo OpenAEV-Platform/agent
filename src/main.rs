@@ -60,12 +60,9 @@ fn compute_working_dir() -> PathBuf {
     current_exe_path.parent().unwrap().to_path_buf()
 }
 
-fn agent_start(
-    mut settings_data: Settings,
-    is_service: bool,
-) -> Result<Vec<JoinHandle<()>>, Error> {
+fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHandle<()>>, Error> {
     let url = settings_data.openaev.url;
-    let secrets = secrets::open(settings_data.openaev.token.take());
+    let secrets = secrets::open();
     let unsecured_certificate = settings_data.openaev.unsecured_certificate;
     let with_proxy = settings_data.openaev.with_proxy;
     let installation_mode = settings_data.openaev.installation_mode;
