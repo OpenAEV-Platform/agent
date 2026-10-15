@@ -461,6 +461,47 @@ Function sanitizeUserName
   Exch $0
 FunctionEnd
 
+; GetCurrentUserSid
+;   Returns the SID ("S-1-...") of the user running this installer, or "" on
+;   failure. Reads the user from the process token with the Windows API: no
+;   process to start, no output to parse, and never another account with the
+;   same name (which a lookup by user name could return).
+; Usage:
+;   Call GetCurrentUserSid
+;   Pop <sid>
+Function GetCurrentUserSid
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  StrCpy $4 ""
+
+  System::Call 'advapi32::OpenProcessToken(p -1, i 0x8, *p .r0) i .r1' ; current process, TOKEN_QUERY
+  ${If} $1 != 0
+    System::Alloc 256 ; TOKEN_USER, followed by the SID
+    Pop $2
+    System::Call 'advapi32::GetTokenInformation(p r0, i 1, p r2, i 256, *i .r1) i .r1' ; TokenUser
+    ${If} $1 != 0
+      System::Call '*$2(p .r3)' ; TOKEN_USER.User.Sid
+      System::Call 'advapi32::ConvertSidToStringSidW(p r3, *p .r3) i .r1'
+      ${If} $1 != 0
+        System::Call 'kernel32::lstrcpynW(w .r4, p r3, i ${NSIS_MAX_STRLEN})'
+        System::Call 'kernel32::LocalFree(p r3)'
+      ${EndIf}
+    ${EndIf}
+    System::Free $2
+    System::Call 'kernel32::CloseHandle(p r0)'
+  ${EndIf}
+
+  StrCpy $0 $4
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
+
 ; CreateProtectedFile
 ;   Creates a new file with the given security descriptor (SDDL) and returns a
 ;   write handle for FileWrite and FileClose, or -1 on failure (including when the
@@ -514,25 +555,11 @@ section "install"
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
 
-  ; 2. Resolve the SID of the user running this installer (the agent runs as this user).
-  ;    whoami reads it from the process token: no PowerShell (which AppLocker or
-  ;    Constrained Language Mode can block) and no domain controller needed.
-  ;    Output: "domain\user","S-1-..."
-  nsExec::ExecToStack '"$SYSDIR\whoami.exe" /user /fo csv /nh'
-  Pop $R0    ; Pop the exit code
-  Pop $UserSID  ; Pop the output
-  Push $UserSID
-  Push ',"S-1-'
-  Call StrStr
+  ; 2. Resolve the SID of the user running this installer (the agent runs as this user),
+  ;    from the process token: no program to start (whoami can be missing or blocked),
+  ;    no output to parse, and no domain controller needed.
+  Call GetCurrentUserSid
   Pop $UserSID
-  StrCpy $UserSID $UserSID "" 2 ; drop the separator
-
-  ;remove newline and whitespace from the UserSID, then the closing quote
-  Push $UserSID
-  Call Trim
-  Pop $UserSID
-  StrCpy $UserSID $UserSID -1
-
   StrCpy $R1 $UserSID 4
   ${If} $R1 != "S-1-"
     Abort "Unable to resolve the SID of the current user"
