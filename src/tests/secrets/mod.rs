@@ -15,12 +15,16 @@ pub struct MemoryStore {
 impl MemoryStore {
     pub fn with_token(token: &str) -> Arc<MemoryStore> {
         let store = MemoryStore::default();
-        store
-            .secrets
+        store.set_token(token);
+        Arc::new(store)
+    }
+
+    /// Replaces the token, like a rotation or a store that can be read again.
+    pub fn set_token(&self, token: &str) {
+        self.secrets
             .lock()
             .unwrap()
             .insert(crate::secrets::TOKEN.to_string(), token.to_string());
-        Arc::new(store)
     }
 }
 
