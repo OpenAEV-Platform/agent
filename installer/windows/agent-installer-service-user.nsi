@@ -461,6 +461,7 @@ FunctionEnd
 ;   Call CreateProtectedFile
 ;   Pop <handle>
 Function CreateProtectedFile
+  ; 1. Read the arguments and save the registers used ($3 = handle, -1 until created)
   Exch $0 ; SDDL
   Exch
   Exch $1 ; path
@@ -468,15 +469,20 @@ Function CreateProtectedFile
   Push $3
   StrCpy $3 -1
 
+  ; 2. Convert the SDDL string into a security descriptor
   System::Call 'advapi32::ConvertStringSecurityDescriptorToSecurityDescriptorW(w r0, i 1, *p .r2, p 0) i .r0' ; SDDL_REVISION_1
   ${If} $0 != 0
+    ; 3. Wrap the security descriptor in a SECURITY_ATTRIBUTES structure
     System::Call '*(&l4, p r2, i 0) p .r0' ; SECURITY_ATTRIBUTES
-    ; GENERIC_WRITE, no sharing, CREATE_NEW, FILE_ATTRIBUTE_NORMAL
+    ; 4. Create the file with this ACL
+    ;    GENERIC_WRITE, no sharing, CREATE_NEW, FILE_ATTRIBUTE_NORMAL
     System::Call 'kernel32::CreateFileW(w r1, i 0x40000000, i 0, p r0, i 1, i 0x80, p 0) p .r3'
+    ; 5. Free the SECURITY_ATTRIBUTES structure and the security descriptor
     System::Free $0
     System::Call 'kernel32::LocalFree(p r2)'
   ${EndIf}
 
+  ; 6. Restore the registers and return the handle (-1 on failure)
   StrCpy $0 $3
   Pop $3
   Pop $2
