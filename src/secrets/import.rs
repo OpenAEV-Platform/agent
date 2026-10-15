@@ -42,15 +42,32 @@ pub fn import(
         }
     }
 
-    if bootstrap_token.is_some() {
-        fs::remove_file(bootstrap)?;
-    }
-    if config_token.is_some() {
+    // The config copy goes first. Were the bootstrap file deleted first, a crash or a config
+    // that cannot be rewritten would leave the config token alone at the next start, and it
+    // would overwrite the newer bootstrap token in the store.
+    let config_cleaned = match config_token {
+        None => true,
         // The token is safe in the store by now: a config left as it was is worth a
         // warning, not an agent that refuses to start.
-        if let Err(err) = remove_token_from_config(config) {
+        Some(_) => match remove_token_from_config(config) {
+            Ok(()) => true,
+            Err(err) => {
+                warn!(
+                    "The token is still in clear text in {}: {err}",
+                    config.display()
+                );
+                false
+            }
+        },
+    };
+    if let Some(bootstrap_token) = &bootstrap_token {
+        // Kept while the config holds another token, so that it still wins at the next start.
+        if config_cleaned || config_token == Some(bootstrap_token.as_str()) {
+            fs::remove_file(bootstrap)?;
+        } else {
             warn!(
-                "The token is still in clear text in {}: {err}",
+                "Keeping {} until the older token is removed from {}",
+                bootstrap.display(),
                 config.display()
             );
         }
