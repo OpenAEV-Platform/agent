@@ -226,4 +226,61 @@ mod tests {
         drop(copy);
         assert!(dropped.load(Ordering::SeqCst), "wiped with its last copy");
     }
+
+    #[test]
+    fn test_client_sends_the_new_token_after_a_rotation() {
+        // -- PREPARE --
+        let mut server = mockito::Server::new();
+        let old_token = server
+            .mock("POST", "/api/test")
+            .match_header(AUTHORIZATION_HEADER, "Bearer old-token")
+            .with_status(200)
+            .expect(1)
+            .create();
+        let new_token = server
+            .mock("POST", "/api/test")
+            .match_header(AUTHORIZATION_HEADER, "Bearer new-token")
+            .with_status(200)
+            .expect(1)
+            .create();
+        let store = MemoryStore::with_token("old-token");
+        let client = Client::new(server.url(), store.clone(), false, false);
+
+        // -- EXECUTE --
+        let before = client.post("/api/test").unwrap().send().unwrap();
+        store.set_token("new-token");
+        let after = client.post("/api/test").unwrap().send().unwrap();
+
+        // -- ASSERT --
+        // The same client picks up the new token: it is read from the store on each call.
+        assert!(before.status().is_success());
+        assert!(after.status().is_success());
+        old_token.assert();
+        new_token.assert();
+    }
+
+    #[test]
+    fn test_client_recovers_once_the_store_can_be_read_again() {
+        // -- PREPARE --
+        let mut server = mockito::Server::new();
+        let request = server
+            .mock("POST", "/api/test")
+            .match_header(AUTHORIZATION_HEADER, format!("Bearer {TOKEN}").as_str())
+            .with_status(200)
+            .expect(1)
+            .create();
+        let store = Arc::new(MemoryStore::default());
+        let client = Client::new(server.url(), store.clone(), false, false);
+
+        // -- EXECUTE --
+        let failed = client.post("/api/test");
+        store.set_token(TOKEN);
+        let recovered = client.post("/api/test").unwrap().send().unwrap();
+
+        // -- ASSERT --
+        assert!(failed.is_err(), "no request without a token");
+        assert!(recovered.status().is_success());
+        // Exactly one request reached the platform: none was sent while the store failed.
+        request.assert();
+    }
 }
