@@ -28,14 +28,6 @@ features = [
     "serde",
 ]
 
-[dependencies.toml_edit]
-version = "0.25.17"
-features = [
-    "parse",
-    "display",
-]
-default-features = false
-
 [dependencies.serde]
 version = "1.0.203"
 features = [
@@ -60,12 +52,6 @@ features = [
 [target."cfg(windows)".dependencies]
 windows-service = "0.8.0"
 windows-service-detector = "0.1.0"
-
-[target."cfg(windows)".dependencies.windows-sys]
-version = "0.61.2"
-features = [
-    "Win32_Storage_FileSystem",
-]
 
 [dev-dependencies]
 filetime = "0.2.25"

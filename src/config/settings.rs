@@ -2,21 +2,18 @@ use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
 use std::env;
 use std::fmt;
-use std::path::PathBuf;
 use zeroize::Zeroizing;
 
-pub const ENV_PRODUCTION: &str = "production";
+const ENV_PRODUCTION: &str = "production";
 const ENV_PRODUCTION_CONFIG_FILE: &str = "openaev-agent-config";
 
 #[derive(Deserialize, Clone)]
 #[allow(unused)]
 pub struct OpenAEV {
     pub url: String,
-    // Optional: once moved to the OS secret store, the token is no longer in the config.
     // Zeroizing from deserialization on, so that every path that drops it wipes it. The
-    // copies the config crate makes while loading the file are not: none are left once
-    // the token has moved to the OS secret store.
-    pub token: Option<Zeroizing<String>>,
+    // copies the config crate makes while loading the file are not.
+    pub token: Zeroizing<String>,
     pub unsecured_certificate: bool,
     pub with_proxy: bool,
     pub installation_mode: String,
@@ -29,7 +26,7 @@ impl fmt::Debug for OpenAEV {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OpenAEV")
             .field("url", &self.url)
-            .field("token", &self.token.as_ref().map(|_| "<redacted>"))
+            .field("token", &"<redacted>")
             .field("unsecured_certificate", &self.unsecured_certificate)
             .field("with_proxy", &self.with_proxy)
             .field("installation_mode", &self.installation_mode)
@@ -82,23 +79,15 @@ impl Settings {
         env::var("env").unwrap_or_else(|_| ENV_PRODUCTION.into())
     }
 
-    /// The directory of the executable, where the installers put the config and the token.
-    pub fn install_dir() -> PathBuf {
-        let current_exe_patch = env::current_exe().unwrap();
-        current_exe_patch.parent().unwrap().to_path_buf()
-    }
-
-    /// The config file the installers write in production.
-    pub fn production_config_path() -> PathBuf {
-        Self::install_dir().join(format!("{ENV_PRODUCTION_CONFIG_FILE}.toml"))
-    }
-
     pub fn new() -> Result<Self, ConfigError> {
         let run_mode = Self::mode();
         let config = Config::builder().add_source(Environment::with_prefix("openaev"));
         if run_mode == ENV_PRODUCTION {
-            // Join the expected config file with the executable directory
-            let config_file = Self::install_dir().join(ENV_PRODUCTION_CONFIG_FILE);
+            // Get the current executable path
+            let current_exe_patch = env::current_exe().unwrap();
+            let parent_path = current_exe_patch.parent().unwrap();
+            // Join the expected config file with the parent
+            let config_file = parent_path.join(ENV_PRODUCTION_CONFIG_FILE);
             let config_path = config_file.display();
             config
                 .add_source(File::with_name(&config_path.to_string()).required(true))
