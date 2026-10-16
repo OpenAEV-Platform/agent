@@ -1,0 +1,47 @@
+name: Package installer scripts
+description: "Stage the installer and upgrade scripts and upload them as an artifact"
+
+runs:
+  using: composite
+  steps:
+    - name: Stage scripts
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p staging/linux staging/macos staging/windows
+
+        # Linux / macOS shell scripts
+        for os in linux macos; do
+          for script in \
+            agent-installer.sh \
+            agent-upgrade.sh \
+            agent-installer-session-user.sh \
+            agent-upgrade-session-user.sh \
+            agent-installer-service-user.sh \
+            agent-upgrade-service-user.sh; do
+            cp "./installer/${os}/${script}" \
+               "staging/${os}/openaev-${script%.sh}.sh"
+          done
+        done
+
+        # Windows PowerShell scripts
+        for script in \
+          agent-installer.ps1 \
+          agent-upgrade.ps1 \
+          agent-installer-session-user.ps1 \
+          agent-upgrade-session-user.ps1 \
+          agent-installer-service-user.ps1 \
+          agent-upgrade-service-user.ps1; do
+          cp "./installer/windows/${script}" \
+             "staging/windows/openaev-${script%.ps1}.ps1"
+        done
+
+        find staging -type f
+
+    - name: Upload scripts artifact
+      uses: actions/upload-artifact@v7
+      with:
+        name: agent-scripts
+        path: staging/
+        if-no-files-found: error
+        retention-days: 14
