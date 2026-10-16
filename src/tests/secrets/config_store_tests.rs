@@ -24,7 +24,8 @@ mod tests {
     #[test]
     fn test_config_store_only_holds_the_token() {
         // -- PREPARE --
-        let (store, file) = store_in(&test_dir("config-store-name"));
+        let dir = test_dir("config-store-name");
+        let (store, file) = store_in(&dir);
         fs::write(&file, config("first-token")).unwrap();
 
         // -- EXECUTE & ASSERT --
@@ -34,7 +35,8 @@ mod tests {
     #[test]
     fn test_config_store_reads_the_new_token_after_an_edit() {
         // -- PREPARE --
-        let (store, file) = store_in(&test_dir("config-store-edit"));
+        let dir = test_dir("config-store-edit");
+        let (store, file) = store_in(&dir);
         fs::write(&file, config("first-token")).unwrap();
 
         // -- EXECUTE --
@@ -51,7 +53,8 @@ mod tests {
     #[test]
     fn test_config_store_fails_without_a_config_and_recovers_once_it_exists() {
         // -- PREPARE --
-        let (store, file) = store_in(&test_dir("config-store-missing"));
+        let dir = test_dir("config-store-missing");
+        let (store, file) = store_in(&dir);
 
         // -- EXECUTE --
         let missing = store.get(TOKEN);
@@ -66,7 +69,8 @@ mod tests {
     #[test]
     fn test_config_store_fails_on_an_invalid_config_and_recovers_after_repair() {
         // -- PREPARE --
-        let (store, file) = store_in(&test_dir("config-store-invalid"));
+        let dir = test_dir("config-store-invalid");
+        let (store, file) = store_in(&dir);
         // The closing quote is missing on the token line itself.
         let broken = config("leaked-token").replace("leaked-token\"", "leaked-token");
         let without_token = config("first-token").replace("token = \"first-token\"\n", "");
