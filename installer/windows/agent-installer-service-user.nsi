@@ -64,6 +64,7 @@ Var /GLOBAL ConfigPassword
 Var /GLOBAL DisplayName
 Var /GLOBAL ServiceName
 Var UserSID
+Var UserSidType
 Var Perm
 
 Function verifyParam
@@ -446,23 +447,109 @@ Function nsDialogsPageLeave
   Call updateDirAndServiceName
 FunctionEnd
 
+; CreateProtectedFile
+;   Creates a new file with the given security descriptor (SDDL) and returns a
+;   write handle for FileWrite and FileClose, or -1 on failure (including when the
+;   file already exists). The ACL is set by the call that creates the file, and
+;   the handle is not shared: no other process can open the file before it is
+;   closed. Creating the file first and restricting it afterwards would leave a
+;   window where a handle opened with the folder's ACL keeps reading what is
+;   written later: changing an ACL does not revoke open handles.
+; Usage:
+;   Push <path>
+;   Push <SDDL>
+;   Call CreateProtectedFile
+;   Pop <handle>
+Function CreateProtectedFile
+  ; 1. Read the arguments and save the registers used ($3 = handle, -1 until created)
+  Exch $0 ; SDDL
+  Exch
+  Exch $1 ; path
+  Push $2
+  Push $3
+  StrCpy $3 -1
+
+  ; 2. Convert the SDDL string into a security descriptor
+  System::Call 'advapi32::ConvertStringSecurityDescriptorToSecurityDescriptorW(w r0, i 1, *p .r2, p 0) i .r0' ; SDDL_REVISION_1
+  ${If} $0 != 0
+    ; 3. Wrap the security descriptor in a SECURITY_ATTRIBUTES structure
+    System::Call '*(&l4, p r2, i 0) p .r0' ; SECURITY_ATTRIBUTES
+    ; 4. Create the file with this ACL
+    ;    GENERIC_WRITE, no sharing, CREATE_NEW, FILE_ATTRIBUTE_NORMAL
+    System::Call 'kernel32::CreateFileW(w r1, i 0x40000000, i 0, p r0, i 1, i 0x80, p 0) p .r3'
+    ; 5. Free the SECURITY_ATTRIBUTES structure and the security descriptor
+    System::Free $0
+    System::Call 'kernel32::LocalFree(p r2)'
+  ${EndIf}
+
+  ; 6. Restore the registers and return the handle (-1 on failure)
+  StrCpy $0 $3
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
+
 section "install"
   # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
   setOutPath $INSTDIR
 
-  ;stopping existing service
+  ; 1. Resolve the SID of $ConfigUser
+  ;    (needed both for the config ACL in step 7 and for the service permissions in step 11)
+  ;    Before stopping the existing service: an abort here must leave a working
+  ;    installation in place.
+  Push $ConfigUser
+  Call ResolveAccountSid
+  Pop $UserSID
+
+  StrCpy $R1 $UserSID 4
+  ${If} $R1 != "S-1-"
+    Abort "Unable to resolve the SID of $ConfigUser"
+  ${EndIf}
+
+  ; 2. Check that $ConfigUser is a user account.
+  ;    The lookup also resolves groups and aliases (e.g. BUILTIN\Users): the service
+  ;    cannot run as one, and granting it read access would expose the token to every
+  ;    member. Only user accounts are supported: the service is created with a
+  ;    password, which virtual accounts (NT SERVICE\...), managed service accounts and
+  ;    the built-in service accounts do not take.
+  ${If} $UserSidType != 1 ; SidTypeUser
+    Abort "$ConfigUser is not a user account (SID_NAME_USE $UserSidType)"
+  ${EndIf}
+
+  ; 3. Stop the existing service
   ExecWait 'sc stop $ServiceName' $0
 
-  ;deleting existing service
+  ; 4. Delete the existing service
   ExecWait 'sc delete $ServiceName' $0
 
-
+  ; 5. Copy the agent binary and icon
   # Files added here should be removed by the uninstaller (see section "uninstall")
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
 
-  ; write agent config file
-  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
+  ; 6. Delete the previous config, so its ACL and owner are never reused: the new
+  ;    file is created from scratch in step 7.
+  ClearErrors
+  Delete "$INSTDIR\openaev-agent-config.toml"
+  ${If} ${Errors}
+    Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+
+  ; 7. Create the config with a restricted ACL.
+  ;    The config holds the token. Without an explicit ACL it inherits the folder's,
+  ;    which lets every local user read it. Only SYSTEM, Administrators and read access
+  ;    for the service account. Well-known SIDs, not names: account names are localized.
+  Push "$INSTDIR\openaev-agent-config.toml"
+  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;$UserSID)"
+  Call CreateProtectedFile
+  Pop $4
+  ${If} $4 == -1
+    Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+
+  ; 8. Write the agent config (FileWrite only sets the error flag on failure)
+  ClearErrors
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "$\r$\n"
     FileWrite $4 "[openaev]$\r$\n"
@@ -476,24 +563,17 @@ section "install"
     FileWrite $4 "tenant_id = $\"$ConfigTenantId$\"$\r$\n"
     FileWrite $4 "$\r$\n" ; newline
   FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
 
-  ; register windows service
+  ; 9. Register the Windows service, running as $ConfigUser
   ExecWait 'sc create $ServiceName error="severe" displayname="$DisplayName" obj="$ConfigUser" password="$ConfigPassword" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"' $R0
 
-  ; configure restart in case of failure
+  ; 10. Configure restart in case of failure
   ExecWait 'sc failure $ServiceName reset= 0 actions= restart/60000/restart/60000/restart/60000'
 
-  ;------ Add the permissions to start/stop service for the user
-
-  ; Retrieve the SID for $ConfigUser using PowerShell
-  nsExec::ExecToStack "powershell.exe -NoProfile -WindowStyle Hidden -Command (New-Object System.Security.Principal.NTAccount('$ConfigUser')).Translate([System.Security.Principal.SecurityIdentifier]).Value"
-  Pop $R0    ; Pop the exit code
-  Pop $UserSID  ; Pop the SID string
-
-  ;remove newline and whitespace from the UserSID
-  Push $UserSID
-  Call Trim
-  Pop $UserSID
+  ; 11. Allow $ConfigUser to start/stop the service ($UserSID resolved in step 1)
 
   ; Get Existing permission and Add permission for the user to stop/start the service
   nsExec::ExecToStack "cmd /c sc sdshow $ServiceName"
@@ -511,10 +591,10 @@ section "install"
   ;run the command to add the permission
   ExecWait 'cmd /c sc sdset "$ServiceName" "D:(A;;RPWPCR;;;$UserSID)$Perm"' $R0
 
-
-  ; start the service
+  ; 12. Start the service
   ExecWait 'sc start $ServiceName' $R0
 
+  ; 13. Write the uninstaller
   # Uninstaller - See function un.onInit and section "uninstall" for configuration
   writeUninstaller "$INSTDIR\uninstall.exe"
 sectionEnd
@@ -637,13 +717,67 @@ Function un.onInit
 FunctionEnd
 
 section "uninstall"
-  ; unregister service
+  ; 1. Stop the service
   ExecWait 'sc stop $ServiceName'
+
+  ; 2. Unregister the service
   ExecWait 'sc delete $ServiceName'
 
-  ; delete everything
+  ; 3. Delete the install directory
   RMDir /r $INSTDIR
 sectionEnd
+
+; ResolveAccountSid
+;   Returns the SID ("S-1-...") of an account name, or "" if it cannot be resolved,
+;   and sets $UserSidType to its SID_NAME_USE (1 = user, 0 if not resolved).
+;   Calls the Windows API rather than PowerShell, which AppLocker or Constrained
+;   Language Mode can block, and which a quote in the name breaks.
+; Usage:
+;   Push <account>
+;   Call ResolveAccountSid
+;   Pop <sid>
+Function ResolveAccountSid
+  Exch $0 ; Account name
+  Push $1
+  Push $2
+  Push $3
+  StrCpy $UserSidType 0
+
+  ; An empty name would resolve to the BUILTIN domain
+  ${If} $0 == ""
+    Goto Done
+  ${EndIf}
+
+  ; sc.exe takes ".\name" for a local account; the lookup needs "COMPUTER\name"
+  StrCpy $1 $0 2
+  ${If} $1 == ".\"
+    ReadEnvStr $1 COMPUTERNAME
+    StrCpy $0 $0 "" 2
+    StrCpy $0 "$1\$0"
+  ${EndIf}
+
+  System::Alloc 68 ; SECURITY_MAX_SID_SIZE
+  Pop $1
+  System::Call 'advapi32::LookupAccountNameW(p 0, w r0, p r1, *i 68, w .r2, *i ${NSIS_MAX_STRLEN}, *i .s) i .r3'
+  Pop $UserSidType
+  StrCpy $0 ""
+  ${If} $3 == 0
+    StrCpy $UserSidType 0
+  ${Else}
+    System::Call 'advapi32::ConvertSidToStringSidW(p r1, *p .r2) i .r3'
+    ${If} $3 != 0
+      System::Call 'kernel32::lstrcpynW(w .r0, p r2, i ${NSIS_MAX_STRLEN})'
+      System::Call 'kernel32::LocalFree(p r2)'
+    ${EndIf}
+  ${EndIf}
+  System::Free $1
+
+  Done:
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
 
 ; Trim
 ;   Removes leading & trailing whitespace from a string

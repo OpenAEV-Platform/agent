@@ -59,6 +59,7 @@ Var /GLOBAL ConfigInstallDir
 Var /GLOBAL ConfigWithAdminPrivilege
 Var /GLOBAL UserSanitized
 Var /GLOBAL AgentName
+Var /GLOBAL UserSID
 
 function verifyParam
 
@@ -460,16 +461,134 @@ Function sanitizeUserName
   Exch $0
 FunctionEnd
 
+; GetCurrentUserSid
+;   Returns the SID ("S-1-...") of the user running this installer, or "" on
+;   failure. Reads the user from the process token with the Windows API: no
+;   process to start, no output to parse, and never another account with the
+;   same name (which a lookup by user name could return).
+; Usage:
+;   Call GetCurrentUserSid
+;   Pop <sid>
+Function GetCurrentUserSid
+  Push $0
+  Push $1
+  Push $2
+  Push $3
+  Push $4
+  StrCpy $4 ""
+
+  System::Call 'advapi32::OpenProcessToken(p -1, i 0x8, *p .r0) i .r1' ; current process, TOKEN_QUERY
+  ${If} $1 != 0
+    System::Alloc 256 ; TOKEN_USER, followed by the SID
+    Pop $2
+    System::Call 'advapi32::GetTokenInformation(p r0, i 1, p r2, i 256, *i .r1) i .r1' ; TokenUser
+    ${If} $1 != 0
+      System::Call '*$2(p .r3)' ; TOKEN_USER.User.Sid
+      System::Call 'advapi32::ConvertSidToStringSidW(p r3, *p .r3) i .r1'
+      ${If} $1 != 0
+        System::Call 'kernel32::lstrcpynW(w .r4, p r3, i ${NSIS_MAX_STRLEN})'
+        System::Call 'kernel32::LocalFree(p r3)'
+      ${EndIf}
+    ${EndIf}
+    System::Free $2
+    System::Call 'kernel32::CloseHandle(p r0)'
+  ${EndIf}
+
+  StrCpy $0 $4
+  Pop $4
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
+
+; CreateProtectedFile
+;   Creates a new file with the given security descriptor (SDDL) and returns a
+;   write handle for FileWrite and FileClose, or -1 on failure (including when the
+;   file already exists). The ACL is set by the call that creates the file, and
+;   the handle is not shared: no other process can open the file before it is
+;   closed. Creating the file first and restricting it afterwards would leave a
+;   window where a handle opened with the folder's ACL keeps reading what is
+;   written later: changing an ACL does not revoke open handles.
+; Usage:
+;   Push <path>
+;   Push <SDDL>
+;   Call CreateProtectedFile
+;   Pop <handle>
+Function CreateProtectedFile
+  ; 1. Read the arguments and save the registers used ($3 = handle, -1 until created)
+  Exch $0 ; SDDL
+  Exch
+  Exch $1 ; path
+  Push $2
+  Push $3
+  StrCpy $3 -1
+
+  ; 2. Convert the SDDL string into a security descriptor
+  System::Call 'advapi32::ConvertStringSecurityDescriptorToSecurityDescriptorW(w r0, i 1, *p .r2, p 0) i .r0' ; SDDL_REVISION_1
+  ${If} $0 != 0
+    ; 3. Wrap the security descriptor in a SECURITY_ATTRIBUTES structure
+    System::Call '*(&l4, p r2, i 0) p .r0' ; SECURITY_ATTRIBUTES
+    ; 4. Create the file with this ACL
+    ;    GENERIC_WRITE, no sharing, CREATE_NEW, FILE_ATTRIBUTE_NORMAL
+    System::Call 'kernel32::CreateFileW(w r1, i 0x40000000, i 0, p r0, i 1, i 0x80, p 0) p .r3'
+    ; 5. Free the SECURITY_ATTRIBUTES structure and the security descriptor
+    System::Free $0
+    System::Call 'kernel32::LocalFree(p r2)'
+  ${EndIf}
+
+  ; 6. Restore the registers and return the handle (-1 on failure)
+  StrCpy $0 $3
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
+
 section "install"
 
   # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
   setOutPath $INSTDIR
+
+  ; 1. Copy the agent binary and icon
   # Files added here should be removed by the uninstaller (see section "uninstall")
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
-	
-  ; write agent config file
-  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
+
+  ; 2. Resolve the SID of the user running this installer (the agent runs as this user),
+  ;    from the process token: no program to start (whoami can be missing or blocked),
+  ;    no output to parse, and no domain controller needed.
+  Call GetCurrentUserSid
+  Pop $UserSID
+  StrCpy $R1 $UserSID 4
+  ${If} $R1 != "S-1-"
+    Abort "Unable to resolve the SID of the current user"
+  ${EndIf}
+
+  ; 3. Delete the previous config, so its ACL and owner are never reused: the new
+  ;    file is created from scratch in step 4.
+  ClearErrors
+  Delete "$INSTDIR\openaev-agent-config.toml"
+  ${If} ${Errors}
+    Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+
+  ; 4. Create the config with a restricted ACL.
+  ;    The config holds the token. Without an explicit ACL it inherits the folder's,
+  ;    which lets every local user read it. Only SYSTEM, Administrators and the current
+  ;    user get access. The user keeps full control: the session-user upgrade reruns
+  ;    this installer as that user and rewrites the file. Well-known SIDs, not names:
+  ;    account names are localized.
+  Push "$INSTDIR\openaev-agent-config.toml"
+  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;$UserSID)"
+  Call CreateProtectedFile
+  Pop $4
+  ${If} $4 == -1
+    Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+
+  ; 5. Write the agent config (FileWrite only sets the error flag on failure)
+  ClearErrors
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "$\r$\n"
     FileWrite $4 "[openaev]$\r$\n"
@@ -483,13 +602,17 @@ section "install"
     FileWrite $4 "tenant_id = $\"$ConfigTenantId$\"$\r$\n"
     FileWrite $4 "$\r$\n" ; newline
   FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
 
-  ; write agent start file to launch the agent without a powershell window displayed
+  ; 6. Write the agent start file to launch the agent without a powershell window displayed
   FileOpen $4 "$INSTDIR\openaev_agent_start.ps1" w
     FileWrite $4 "Start-Process -FilePath '$INSTDIR\openaev-agent.exe' -WindowStyle Hidden"
   FileClose $4
 
-  ;admin -> use a scheduled task, non admin -> write in the registry and create a script to launch the agent to create a startup app
+  ; 7. Register the agent to start at logon, then start it:
+  ;    admin -> use a scheduled task, non admin -> write in the registry and create a script to launch the agent to create a startup app
   ${If} $ConfigWithAdminPrivilege == "true"
     ; Stop the scheduled task
     ExecWait 'schtasks /End /TN "$AgentName"' $0
@@ -516,6 +639,7 @@ section "install"
     nsExec::ExecToStack "powershell.exe -ExecutionPolicy Bypass -WindowStyle hidden -File $INSTDIR\openaev_agent_start.ps1"
   ${EndIf}
 
+  ; 8. Write the uninstaller
   # Uninstaller - See function un.onInit and section "uninstall" for configuration
   writeUninstaller "$INSTDIR\uninstall.exe"
 sectionEnd
@@ -668,11 +792,14 @@ done:
 FunctionEnd
  
 section "uninstall"
+   ; 1. Detect how the agent was installed: an agent name containing "Administrator"
+   ;    was installed with admin privileges (scheduled task), otherwise with a registry Run key
    Push $AgentName
    Push "Administrator"
    Call un.StrContains
    Pop $R0
 
+   ; 2. Stop the agent and remove its start at logon
    ${If} $R0 != ""
     !insertmacro VerifyUserIsAdmin
      ; Stop the scheduled task
@@ -690,9 +817,9 @@ section "uninstall"
      DeleteRegValue HKCU "Software\Microsoft\Windows\CurrentVersion\Run" "$AgentName"
    ${EndIf}
 
-  ; Wait 1s to allow the task to fully end before deleting the exe
+  ; 3. Wait 1s to allow the task to fully end before deleting the exe
   Sleep 1000
 
-  ; delete everything
+  ; 4. Delete the install directory
   RMDir /r $INSTDIR
 sectionEnd
