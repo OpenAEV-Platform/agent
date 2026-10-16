@@ -1,4 +1,4 @@
-const TOKEN: &str = "token";
+const TOKEN: &str = "test-token-value";
 
 #[cfg(test)]
 mod tests {

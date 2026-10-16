@@ -5,7 +5,8 @@ use crate::secrets::SecretStore;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
-use std::path::PathBuf;
+use std::ops::Deref;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use zeroize::Zeroizing;
@@ -52,9 +53,26 @@ impl SecretStore for FailingStore {
     }
 }
 
+/// A directory for one test, deleted with everything in it when dropped.
+pub struct TestDir(PathBuf);
+
+impl Deref for TestDir {
+    type Target = Path;
+
+    fn deref(&self) -> &Path {
+        &self.0
+    }
+}
+
+impl Drop for TestDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.0);
+    }
+}
+
 /// A fresh, empty directory for one test, so that tests running in parallel never share a
-/// file.
-pub fn test_dir(name: &str) -> PathBuf {
+/// file. Keep it in a variable for the whole test: it is deleted when dropped.
+pub fn test_dir(name: &str) -> TestDir {
     static COUNTER: AtomicUsize = AtomicUsize::new(0);
     let dir = env::temp_dir().join(format!(
         "openaev-agent-{name}-{}-{}",
@@ -63,5 +81,5 @@ pub fn test_dir(name: &str) -> PathBuf {
     ));
     let _ = fs::remove_dir_all(&dir);
     fs::create_dir_all(&dir).unwrap();
-    dir
+    TestDir(dir)
 }
