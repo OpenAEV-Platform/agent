@@ -11,6 +11,7 @@ mid = "=3.0.7"
 tracing-appender = "0.2.3"
 rolling-file = "0.2.0"
 webpki-root-certs = "1.0.9"
+bytes = "1.12.1"
 
 [dependencies.reqwest]
 version = "0.13.0"
@@ -20,6 +21,12 @@ features = [
     "json",
 ]
 default-features = false
+
+[dependencies.zeroize]
+version = "1.9.0"
+features = [
+    "serde",
+]
 
 [dependencies.serde]
 version = "1.0.203"
