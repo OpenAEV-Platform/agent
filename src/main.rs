@@ -2,6 +2,7 @@ mod api;
 mod common;
 mod config;
 mod process;
+mod secrets;
 mod windows;
 
 #[cfg(test)]
@@ -61,7 +62,7 @@ fn compute_working_dir() -> PathBuf {
 
 fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHandle<()>>, Error> {
     let url = settings_data.openaev.url;
-    let token = settings_data.openaev.token;
+    let secrets = secrets::open();
     let unsecured_certificate = settings_data.openaev.unsecured_certificate;
     let with_proxy = settings_data.openaev.with_proxy;
     let installation_mode = settings_data.openaev.installation_mode;
@@ -81,7 +82,7 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
 
     let keep_alive_thread = keep_alive::ping(
         url.clone(),
-        token.clone(),
+        secrets.clone(),
         unsecured_certificate,
         with_proxy,
         installation_mode,
@@ -92,7 +93,7 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
     // Starts the agent listening thread
     let agent_job_thread = agent_job::listen(
         url.clone(),
-        token.clone(),
+        secrets,
         unsecured_certificate,
         with_proxy,
         execution_details.clone(),
