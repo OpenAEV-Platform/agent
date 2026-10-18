@@ -8,7 +8,7 @@ mod windows;
 #[cfg(test)]
 mod tests;
 
-use log::{error, info};
+use log::{error, info, warn};
 use rolling_file::{BasicRollingFileAppender, RollingConditionBasic};
 use std::env;
 use std::fs::create_dir_all;
@@ -60,9 +60,15 @@ fn compute_working_dir() -> PathBuf {
     current_exe_path.parent().unwrap().to_path_buf()
 }
 
-fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHandle<()>>, Error> {
+fn agent_start(
+    mut settings_data: Settings,
+    is_service: bool,
+) -> Result<Vec<JoinHandle<()>>, Error> {
     let url = settings_data.openaev.url;
-    let secret_store = secrets::open();
+    let secret_store = secrets::open(
+        settings_data.openaev.token.take(),
+        settings_data.secrets.os_store,
+    );
     let unsecured_certificate = settings_data.openaev.unsecured_certificate;
     let with_proxy = settings_data.openaev.with_proxy;
     let installation_mode = settings_data.openaev.installation_mode;
@@ -111,6 +117,8 @@ fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHand
 
 fn main() -> Result<(), Error> {
     set_error_hook();
+    // Must run before the settings load. The logger is not ready yet, so it is logged below.
+    let recovered_config = secrets::recover_config();
     let settings_data = Settings::new().map_err(|e| Error::Internal(e.to_string()))?;
     // region Init logger
     let current_exe_patch = env::current_exe().unwrap();
@@ -135,6 +143,12 @@ fn main() -> Result<(), Error> {
 
     // region Process execution
     info!("Starting OpenAEV agent {} ({})", VERSION, Settings::mode());
+    if let Some(source) = recovered_config {
+        warn!(
+            "The config was missing after an interrupted rewrite. It was restored from {}",
+            source.display()
+        );
+    }
     if service_stub::is_windows_service() {
         // Running as a Windows service
         agent_start(settings_data, true).unwrap();
