@@ -1,4 +1,5 @@
 mod config_store_tests;
+mod dpapi_tests;
 mod import_tests;
 mod open_tests;
 mod replace_tests;
