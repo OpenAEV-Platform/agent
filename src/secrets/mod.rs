@@ -13,6 +13,8 @@ mod import;
 mod replace;
 
 pub use config_store::ConfigStore;
+#[cfg(test)]
+pub(crate) use import::cleanup_failure_message;
 pub use import::import;
 pub(crate) use replace::{recover, remove_backup, replace_file};
 

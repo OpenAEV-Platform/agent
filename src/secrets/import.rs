@@ -130,10 +130,7 @@ pub fn import(
         Some(_) => match remove_token_from_config_with_retry(config) {
             Ok(()) => true,
             Err(err) => {
-                error!(
-                    "The token is still in clear text in {}: {err}. Remove the token line by hand",
-                    config.display()
-                );
+                error!("{}", cleanup_failure_message(config, &err));
                 false
             }
         },
@@ -164,6 +161,22 @@ pub fn import(
         }
     }
     Ok(())
+}
+
+/// The error logged when the token cannot be removed from the config.
+pub(crate) fn cleanup_failure_message(config: &Path, err: &Error) -> String {
+    match err {
+        // Service-user installs upgraded from an older version: the agent's account can only
+        // read its config, on purpose. Only an administrator can remove the token line.
+        Error::Io(io) if io.kind() == ErrorKind::PermissionDenied => format!(
+            "The token is still in clear text in {}: the agent's account is not allowed to modify this file. An administrator must remove the token line, or reinstall the agent",
+            config.display()
+        ),
+        _ => format!(
+            "The token is still in clear text in {}: {err}. Remove the token line by hand",
+            config.display()
+        ),
+    }
 }
 
 /// Same as `remove_token_from_config`, retried a few times on file errors.
