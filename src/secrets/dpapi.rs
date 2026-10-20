@@ -16,10 +16,10 @@
 use super::{missing, SecretStore};
 use crate::common::error_model::Error;
 use std::fs;
-use std::fs::OpenOptions;
+use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::{ErrorKind, Write};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::{ptr, slice};
 use windows_sys::Win32::Foundation::LocalFree;
 use windows_sys::Win32::Security::Cryptography::{
@@ -67,18 +67,81 @@ impl SecretStore for DpapiStore {
 
     fn set(&self, name: &str, value: &str) -> Result<(), Error> {
         let blob = protect(value.as_bytes())?;
-        // We write into the existing file instead of creating a new one. A new file would
-        // get the folder's permissions, not the restricted ones the installer set. Also, a
-        // service account may not be allowed to create files in this folder.
-        let mut file = OpenOptions::new()
-            .write(true)
-            .create(true)
-            .truncate(true)
-            .open(self.path(name))?;
+        let path = self.path(name);
+        // Write into the file the installer created, so it keeps the restricted permissions
+        // the installer set. Older installers did not create it: the agent then creates it
+        // with the same kind of permissions, because a new file would get the folder's.
+        let mut file = match OpenOptions::new().write(true).truncate(true).open(&path) {
+            Ok(file) => file,
+            Err(err) if err.kind() == ErrorKind::NotFound => create_protected(&path)?,
+            Err(err) => return Err(Error::Io(err)),
+        };
         file.write_all(&blob)?;
         file.sync_all()?;
         Ok(())
     }
+}
+
+/// Creates `path` with restricted permissions: SYSTEM, Administrators and the file's owner
+/// (the account the agent runs as) get full control, nobody else, and nothing is inherited
+/// from the folder. Same permissions as the file the installers create.
+fn create_protected(path: &Path) -> io::Result<File> {
+    use std::os::windows::ffi::OsStrExt;
+    use std::os::windows::io::FromRawHandle;
+    use windows_sys::Win32::Foundation::{GENERIC_WRITE, INVALID_HANDLE_VALUE};
+    use windows_sys::Win32::Security::Authorization::{
+        ConvertStringSecurityDescriptorToSecurityDescriptorW, SDDL_REVISION_1,
+    };
+    use windows_sys::Win32::Security::{PSECURITY_DESCRIPTOR, SECURITY_ATTRIBUTES};
+    use windows_sys::Win32::Storage::FileSystem::{CreateFileW, CREATE_NEW, FILE_ATTRIBUTE_NORMAL};
+
+    // OW (owner rights) is the account that creates the file: the agent's account.
+    let sddl: Vec<u16> = "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;OW)"
+        .encode_utf16()
+        .chain([0])
+        .collect();
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain([0]).collect();
+    let mut descriptor: PSECURITY_DESCRIPTOR = ptr::null_mut();
+    // SAFETY: the SDDL string ends with a NUL character. On success, `descriptor` is allocated
+    // by Windows and freed below with LocalFree.
+    let converted = unsafe {
+        ConvertStringSecurityDescriptorToSecurityDescriptorW(
+            sddl.as_ptr(),
+            SDDL_REVISION_1,
+            &mut descriptor,
+            ptr::null_mut(),
+        )
+    };
+    if converted == 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let attributes = SECURITY_ATTRIBUTES {
+        nLength: size_of::<SECURITY_ATTRIBUTES>() as u32,
+        lpSecurityDescriptor: descriptor,
+        bInheritHandle: 0,
+    };
+    // SAFETY: the path ends with a NUL character, and `attributes` and `descriptor` live until
+    // the call returns. CREATE_NEW fails instead of opening a file that already exists.
+    let handle = unsafe {
+        CreateFileW(
+            wide.as_ptr(),
+            GENERIC_WRITE,
+            0,
+            &attributes,
+            CREATE_NEW,
+            FILE_ATTRIBUTE_NORMAL,
+            ptr::null_mut(),
+        )
+    };
+    let result = if handle == INVALID_HANDLE_VALUE {
+        Err(io::Error::last_os_error())
+    } else {
+        // SAFETY: the handle is valid and owned by nothing else: File closes it when dropped.
+        Ok(unsafe { File::from_raw_handle(handle) })
+    };
+    // SAFETY: allocated by ConvertStringSecurityDescriptorToSecurityDescriptorW above.
+    unsafe { LocalFree(descriptor) };
+    result
 }
 
 // We use the user scope on purpose, not CRYPTPROTECT_LOCAL_MACHINE. With the machine scope,
