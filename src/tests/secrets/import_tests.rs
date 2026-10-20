@@ -1,6 +1,8 @@
 #[cfg(test)]
 mod tests {
-    use crate::secrets::{import, SecretStore, BOOTSTRAP_FILE, PENDING_FILE, TOKEN};
+    use crate::secrets::{
+        cleanup_failure_message, import, SecretStore, BOOTSTRAP_FILE, PENDING_FILE, TOKEN,
+    };
     use crate::tests::secrets::{
         test_dir, FailingStore, FlakyStore, MemoryStore, MismatchingStore, UnreadableStore,
     };
@@ -641,5 +643,57 @@ mod tests {
         assert_eq!(store.writes.load(Ordering::SeqCst), 0);
         assert!(!bootstrap.exists());
         assert_eq!(fs::read_to_string(&config).unwrap(), CONFIG_WITHOUT_TOKEN);
+    }
+
+    #[test]
+    fn test_cleanup_failure_message_tells_an_administrator_what_to_do() {
+        // -- PREPARE --
+        let config = std::path::Path::new("agent-config.toml");
+        let denied = crate::common::error_model::Error::Io(std::io::Error::from(
+            std::io::ErrorKind::PermissionDenied,
+        ));
+        let invalid =
+            crate::common::error_model::Error::Internal("the config is not valid TOML".to_string());
+
+        // -- EXECUTE --
+        let denied_message = cleanup_failure_message(config, &denied);
+        let invalid_message = cleanup_failure_message(config, &invalid);
+
+        // -- ASSERT --
+        assert!(denied_message.contains("not allowed to modify this file"));
+        assert!(denied_message.contains("An administrator must remove the token line"));
+        assert!(invalid_message.contains("the config is not valid TOML"));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn test_import_keeps_working_when_the_config_cannot_be_modified() {
+        // -- PREPARE --
+        // Like a service-user install upgraded from an older version: the agent's account
+        // can read its config but not modify it (here: a read-only file).
+        let dir = test_dir("import-read-only-config");
+        let config = dir.join("config.toml");
+        fs::write(&config, CONFIG).unwrap();
+        let mut permissions = fs::metadata(&config).unwrap().permissions();
+        permissions.set_readonly(true);
+        fs::set_permissions(&config, permissions.clone()).unwrap();
+        let store = MemoryStore::default();
+
+        // -- EXECUTE --
+        let result = import(
+            &store,
+            &dir.join(BOOTSTRAP_FILE),
+            Some("legacy-token"),
+            &config,
+        );
+        let content = fs::read_to_string(&config).unwrap();
+        #[allow(clippy::permissions_set_readonly_false)]
+        permissions.set_readonly(false);
+        fs::set_permissions(&config, permissions).unwrap();
+
+        // -- ASSERT --
+        assert!(result.is_ok(), "the token is safe in the store");
+        assert_eq!(store.get(TOKEN).unwrap().as_str(), "legacy-token");
+        assert_eq!(content, CONFIG, "the config is left as it was");
     }
 }
