@@ -73,6 +73,48 @@ mod tests {
         assert!(!is_missing(&store.get(TOKEN).unwrap_err()));
     }
 
+    /// The permissions of `path`, as `icacls` prints them, without the path itself.
+    fn acl(path: &std::path::Path) -> String {
+        let output = std::process::Command::new("icacls")
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(output.status.success());
+        let text = String::from_utf8_lossy(&output.stdout).replace(&*path.to_string_lossy(), "");
+        text.lines()
+            .map(str::trim)
+            .filter(|line| line.contains(':') && !line.contains("Successfully"))
+            .collect::<Vec<_>>()
+            .join(
+                "
+",
+            )
+    }
+
+    #[test]
+    fn test_dpapi_store_creates_a_missing_file_with_restricted_permissions() {
+        // -- PREPARE --
+        // Installed by an older installer: no .dpapi file yet.
+        let dir = test_dir("dpapi-created");
+        let store = DpapiStore::new(dir.to_path_buf());
+
+        // -- EXECUTE --
+        store.set(TOKEN, "token").unwrap();
+
+        // -- ASSERT --
+        assert_eq!(store.get(TOKEN).unwrap().as_str(), "token");
+        let acl = acl(&store.path(TOKEN));
+        assert!(
+            !acl.contains("(I)"),
+            "nothing inherited from the folder: {acl}"
+        );
+        assert!(acl.contains(r"NT AUTHORITY\SYSTEM:(F)"), "{acl}");
+        assert!(acl.contains(r"BUILTIN\Administrators:(F)"), "{acl}");
+        for other in ["Authenticated Users", r"BUILTIN\Users", "Everyone"] {
+            assert!(!acl.contains(other), "{other} has access: {acl}");
+        }
+    }
+
     #[test]
     fn test_dpapi_store_keeps_the_file_the_installer_created() {
         // -- PREPARE --
