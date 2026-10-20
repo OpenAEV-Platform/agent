@@ -495,7 +495,7 @@ section "install"
   setOutPath $INSTDIR
 
   ; 1. Resolve the SID of $ConfigUser
-  ;    (needed for the file ACLs in steps 7 and 9, and for the service permissions in step 12)
+  ;    (needed both for the config ACL in step 7 and for the service permissions in step 11)
   ;    Before stopping the existing service: an abort here must leave a working
   ;    installation in place.
   Push $ConfigUser
@@ -528,22 +528,18 @@ section "install"
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
 
-  ; 6. Delete the files of a previous install, so their ACL and owner are never reused.
-  ;    Steps 7 and 9 create them again from scratch.
+  ; 6. Delete the previous config, so its ACL and owner are never reused: the new
+  ;    file is created from scratch in step 7.
   ClearErrors
   Delete "$INSTDIR\openaev-agent-config.toml"
-  Delete "$INSTDIR\openaev-agent-token.bootstrap"
-  Delete "$INSTDIR\openaev-agent-token.dpapi"
   ${If} ${Errors}
-    Abort "Unable to delete the files of the previous installation in $INSTDIR"
+    Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
   ; 7. Create the config with a restricted ACL.
-  ;    The config no longer holds the token, but it still says which platform and
-  ;    tenant the agent reports to. Without an explicit ACL, it would get the folder's
-  ;    ACL, which lets every local user read it. So only SYSTEM and Administrators get
-  ;    access, plus read access for the service account. We use well-known SIDs instead
-  ;    of account names, because account names are translated on non-English Windows.
+  ;    The config holds the token. Without an explicit ACL it inherits the folder's,
+  ;    which lets every local user read it. Only SYSTEM, Administrators and read access
+  ;    for the service account. Well-known SIDs, not names: account names are localized.
   Push "$INSTDIR\openaev-agent-config.toml"
   Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;$UserSID)"
   Call CreateProtectedFile
@@ -558,6 +554,7 @@ section "install"
     FileWrite $4 "$\r$\n"
     FileWrite $4 "[openaev]$\r$\n"
     FileWrite $4 "url = $\"$ConfigURL$\"$\r$\n"
+    FileWrite $4 "token = $\"$ConfigToken$\"$\r$\n"
     FileWrite $4 "unsecured_certificate = $ConfigUnsecuredCertificate$\r$\n"
     FileWrite $4 "with_proxy = $ConfigWithProxy$\r$\n"
     FileWrite $4 "installation_mode = $\"service-user$\"$\r$\n"
@@ -570,47 +567,13 @@ section "install"
     Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
-  ; 9. Hand the token over to the agent
-  ;    The token never goes into the config. The installer writes it to a bootstrap
-  ;    file. At its first start, the agent encrypts it with DPAPI into
-  ;    openaev-agent-token.dpapi, then deletes the bootstrap file.
-  ;    The ACL of each file is set when the file is created. SYSTEM and Administrators
-  ;    get full access. The service account only gets what the agent needs:
-  ;    - bootstrap file: read it, then delete it (FR + SD);
-  ;    - .dpapi file: read it and write into it (FR + FW).
-  ;    The .dpapi file is created empty here because the service account may not be
-  ;    allowed to create files in this folder. The agent writes into it in place, so
-  ;    it keeps this ACL.
-  Push "$INSTDIR\openaev-agent-token.bootstrap"
-  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FRSD;;;$UserSID)"
-  Call CreateProtectedFile
-  Pop $4
-  ${If} $4 == -1
-    Abort "Unable to create $INSTDIR\openaev-agent-token.bootstrap"
-  ${EndIf}
-  ClearErrors
-    FileWrite $4 "$ConfigToken"
-  FileClose $4
-  ${If} ${Errors}
-    Abort "Unable to write $INSTDIR\openaev-agent-token.bootstrap"
-  ${EndIf}
-
-  Push "$INSTDIR\openaev-agent-token.dpapi"
-  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FRFW;;;$UserSID)"
-  Call CreateProtectedFile
-  Pop $4
-  ${If} $4 == -1
-    Abort "Unable to create $INSTDIR\openaev-agent-token.dpapi"
-  ${EndIf}
-  FileClose $4
-
-  ; 10. Register the Windows service, running as $ConfigUser
+  ; 9. Register the Windows service, running as $ConfigUser
   ExecWait 'sc create $ServiceName error="severe" displayname="$DisplayName" obj="$ConfigUser" password="$ConfigPassword" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"' $R0
 
-  ; 11. Configure restart in case of failure
+  ; 10. Configure restart in case of failure
   ExecWait 'sc failure $ServiceName reset= 0 actions= restart/60000/restart/60000/restart/60000'
 
-  ; 12. Allow $ConfigUser to start/stop the service ($UserSID resolved in step 1)
+  ; 11. Allow $ConfigUser to start/stop the service ($UserSID resolved in step 1)
 
   ; Get Existing permission and Add permission for the user to stop/start the service
   nsExec::ExecToStack "cmd /c sc sdshow $ServiceName"
@@ -628,10 +591,10 @@ section "install"
   ;run the command to add the permission
   ExecWait 'cmd /c sc sdset "$ServiceName" "D:(A;;RPWPCR;;;$UserSID)$Perm"' $R0
 
-  ; 13. Start the service
+  ; 12. Start the service
   ExecWait 'sc start $ServiceName' $R0
 
-  ; 14. Write the uninstaller
+  ; 13. Write the uninstaller
   # Uninstaller - See function un.onInit and section "uninstall" for configuration
   writeUninstaller "$INSTDIR\uninstall.exe"
 sectionEnd
