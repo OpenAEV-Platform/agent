@@ -1,7 +1,7 @@
 //! Where the agent keeps the secrets it uses to authenticate.
 //!
-//! The installers give the agent its token in clear text, in a bootstrap file next to the
-//! executable. Older installers wrote it in the config file instead.
+//! The installers write the token in clear text in the config file. A bootstrap file next to
+//! the executable can also give the agent a token: it wins over the config.
 //!
 //! In production, if the platform has an OS secret store and the `os_store` feature flag is
 //! on, the agent moves the token there.
@@ -29,8 +29,8 @@ use zeroize::Zeroizing;
 
 /// Name of the secret the agent uses to authenticate to the platform.
 pub const TOKEN: &str = "token";
-/// File where the installers write the token in clear text. The agent deletes it once the
-/// token is safe in the store.
+/// File that gives the agent a token in clear text. The agent deletes it once the token is
+/// safe in the store.
 pub const BOOTSTRAP_FILE: &str = "openaev-agent-token.bootstrap";
 /// Marker file that exists while a token written to the store is not verified yet. It holds
 /// no secret. While it exists, the stored token is not trusted.
@@ -58,8 +58,8 @@ pub(crate) fn is_missing(err: &Error) -> bool {
 
 /// Opens the store the agent reads its token from.
 ///
-/// `config_token` is the token found in the config file, when an older installer left it
-/// there. `os_store` is the feature flag from the `[secrets]` table of the config.
+/// `config_token` is the token found in the config file. `os_store` is the feature flag from
+/// the `[secrets]` table of the config.
 pub fn open(config_token: Option<Zeroizing<String>>, os_store: bool) -> Arc<dyn SecretStore> {
     let install_dir = Settings::install_dir();
     let bootstrap = install_dir.join(BOOTSTRAP_FILE);
@@ -132,7 +132,7 @@ fn platform_store(_install_dir: &Path) -> Option<Arc<dyn SecretStore>> {
     None
 }
 
-/// Reads the token that the installer left in the bootstrap file, if there is one.
+/// Reads the token from the bootstrap file, if there is one.
 pub(crate) fn read_bootstrap(path: &Path) -> Result<Option<Zeroizing<String>>, Error> {
     match fs::read_to_string(path) {
         Ok(content) => {
