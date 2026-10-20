@@ -4,8 +4,8 @@ use crate::config::settings::Settings;
 use std::path::PathBuf;
 use zeroize::Zeroizing;
 
-/// Reads the token from where the installers left it in clear text: the bootstrap file if
-/// there is one, otherwise the config file.
+/// Reads the token in clear text: from the bootstrap file if there is one, otherwise from the
+/// config file.
 ///
 /// The agent uses this store when the platform has no supported OS secret store yet, or when
 /// moving the token there failed. The token is read again each time it is needed, and never
