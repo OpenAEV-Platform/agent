@@ -49,9 +49,8 @@ impl SecretStore for DpapiStore {
             Err(err) if err.kind() == ErrorKind::NotFound => Vec::new(),
             Err(err) => return Err(Error::Io(err)),
         };
-        // The installer creates this file empty, only to set its permissions. An empty file
-        // means no token was saved yet. Reported as missing, not as a read error, so the
-        // config token can still be imported.
+        // A missing or empty file means no token was saved yet. It is reported as missing,
+        // not as a read error, so the config token can still be imported.
         if blob.is_empty() {
             return Err(missing(format!(
                 "no {name} in {}, reinstall the agent to provide one",
@@ -68,9 +67,8 @@ impl SecretStore for DpapiStore {
     fn set(&self, name: &str, value: &str) -> Result<(), Error> {
         let blob = protect(value.as_bytes())?;
         let path = self.path(name);
-        // Write into the file the installer created, so it keeps the restricted permissions
-        // the installer set. Older installers did not create it: the agent then creates it
-        // with the same kind of permissions, because a new file would get the folder's.
+        // An existing file is rewritten in place, so it keeps its permissions. A missing one
+        // is created with restricted permissions: a plain new file would get the folder's.
         let mut file = match OpenOptions::new().write(true).truncate(true).open(&path) {
             Ok(file) => file,
             Err(err) if err.kind() == ErrorKind::NotFound => create_protected(&path)?,
@@ -84,7 +82,7 @@ impl SecretStore for DpapiStore {
 
 /// Creates `path` with restricted permissions: SYSTEM, Administrators and the file's owner
 /// (the account the agent runs as) get full control, nobody else, and nothing is inherited
-/// from the folder. Same permissions as the file the installers create.
+/// from the folder.
 fn create_protected(path: &Path) -> io::Result<File> {
     use std::os::windows::ffi::OsStrExt;
     use std::os::windows::io::FromRawHandle;

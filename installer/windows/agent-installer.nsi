@@ -415,22 +415,18 @@ section "install"
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
 
-  ; 4. Delete the files of a previous install, so their ACL and owner are never reused.
-  ;    Steps 5 and 7 create them again from scratch.
+  ; 4. Delete the previous config, so its ACL and owner are never reused: the new
+  ;    file is created from scratch in step 5.
   ClearErrors
   Delete "$INSTDIR\openaev-agent-config.toml"
-  Delete "$INSTDIR\openaev-agent-token.bootstrap"
-  Delete "$INSTDIR\openaev-agent-token.dpapi"
   ${If} ${Errors}
-    Abort "Unable to delete the files of the previous installation in $INSTDIR"
+    Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
   ; 5. Create the config with a restricted ACL.
-  ;    The config no longer holds the token, but it still says which platform and
-  ;    tenant the agent reports to. Without an explicit ACL, it would get the folder's
-  ;    ACL, which lets every local user read it. So only SYSTEM (the service account)
-  ;    and Administrators get access. We use well-known SIDs instead of account names,
-  ;    because account names are translated on non-English Windows.
+  ;    The config holds the token. Without an explicit ACL it inherits the folder's,
+  ;    which lets every local user read it. Only SYSTEM (the service account) and
+  ;    Administrators get access. Well-known SIDs, not names: account names are localized.
   Push "$INSTDIR\openaev-agent-config.toml"
   Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
   Call CreateProtectedFile
@@ -444,6 +440,7 @@ section "install"
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "[openaev]$\r$\n"
     FileWrite $4 "url = $\"$ConfigURL$\"$\r$\n"
+    FileWrite $4 "token = $\"$ConfigToken$\"$\r$\n"
     FileWrite $4 "unsecured_certificate = $ConfigUnsecuredCertificate$\r$\n"
     FileWrite $4 "with_proxy = $ConfigWithProxy$\r$\n"
     FileWrite $4 "installation_mode = $\"service$\"$\r$\n"
@@ -456,46 +453,16 @@ section "install"
     Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
-  ; 7. Hand the token over to the agent
-  ;    The token never goes into the config. The installer writes it to a bootstrap
-  ;    file. At its first start, the agent encrypts it with DPAPI into
-  ;    openaev-agent-token.dpapi, then deletes the bootstrap file.
-  ;    Both files get the same restricted ACL as the config, set when each file is
-  ;    created. The .dpapi file is created empty here: the agent writes into it in
-  ;    place, so the file keeps this ACL.
-  Push "$INSTDIR\openaev-agent-token.bootstrap"
-  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
-  Call CreateProtectedFile
-  Pop $4
-  ${If} $4 == -1
-    Abort "Unable to create $INSTDIR\openaev-agent-token.bootstrap"
-  ${EndIf}
-  ClearErrors
-    FileWrite $4 "$ConfigToken"
-  FileClose $4
-  ${If} ${Errors}
-    Abort "Unable to write $INSTDIR\openaev-agent-token.bootstrap"
-  ${EndIf}
-
-  Push "$INSTDIR\openaev-agent-token.dpapi"
-  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
-  Call CreateProtectedFile
-  Pop $4
-  ${If} $4 == -1
-    Abort "Unable to create $INSTDIR\openaev-agent-token.dpapi"
-  ${EndIf}
-  FileClose $4
-
-  ; 8. Register the Windows service
+  ; 7. Register the Windows service
   ExecWait 'sc create $ServiceName error="severe" displayname="${displayName}" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"'
 
-  ; 9. Configure restart in case of failure
+  ; 8. Configure restart in case of failure
   ExecWait 'sc failure $ServiceName reset= 0 actions= restart/60000/restart/60000/restart/60000'
 
-  ; 10. Start the service
+  ; 9. Start the service
   ExecWait 'sc start $ServiceName'
 
-  ; 11. Write the uninstaller
+  ; 10. Write the uninstaller
   # Uninstaller - See function un.onInit and section "uninstall" for configuration
   writeUninstaller "$INSTDIR\uninstall.exe"
 

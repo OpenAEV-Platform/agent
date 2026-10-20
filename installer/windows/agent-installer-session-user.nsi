@@ -565,24 +565,20 @@ section "install"
     Abort "Unable to resolve the SID of the current user"
   ${EndIf}
 
-  ; 3. Delete the files of a previous install, so their ACL and owner are never reused.
-  ;    Steps 4 and 6 create them again from scratch.
+  ; 3. Delete the previous config, so its ACL and owner are never reused: the new
+  ;    file is created from scratch in step 4.
   ClearErrors
   Delete "$INSTDIR\openaev-agent-config.toml"
-  Delete "$INSTDIR\openaev-agent-token.bootstrap"
-  Delete "$INSTDIR\openaev-agent-token.dpapi"
   ${If} ${Errors}
-    Abort "Unable to delete the files of the previous installation in $INSTDIR"
+    Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
   ; 4. Create the config with a restricted ACL.
-  ;    The config no longer holds the token, but it still says which platform and
-  ;    tenant the agent reports to. Without an explicit ACL, it would get the folder's
-  ;    ACL, which lets every local user read it. So only SYSTEM, Administrators and the
-  ;    current user get access. The user keeps full control, because the session-user
-  ;    upgrade runs this installer again as that user, and it must replace the file.
-  ;    We use well-known SIDs instead of account names, because account names are
-  ;    translated on non-English Windows.
+  ;    The config holds the token. Without an explicit ACL it inherits the folder's,
+  ;    which lets every local user read it. Only SYSTEM, Administrators and the current
+  ;    user get access. The user keeps full control: the session-user upgrade reruns
+  ;    this installer as that user and rewrites the file. Well-known SIDs, not names:
+  ;    account names are localized.
   Push "$INSTDIR\openaev-agent-config.toml"
   Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;$UserSID)"
   Call CreateProtectedFile
@@ -597,6 +593,7 @@ section "install"
     FileWrite $4 "$\r$\n"
     FileWrite $4 "[openaev]$\r$\n"
     FileWrite $4 "url = $\"$ConfigURL$\"$\r$\n"
+    FileWrite $4 "token = $\"$ConfigToken$\"$\r$\n"
     FileWrite $4 "unsecured_certificate = $ConfigUnsecuredCertificate$\r$\n"
     FileWrite $4 "with_proxy = $ConfigWithProxy$\r$\n"
     FileWrite $4 "installation_mode = $\"session-user$\"$\r$\n"
@@ -609,42 +606,12 @@ section "install"
     Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
 
-  ; 6. Hand the token over to the agent
-  ;    The token never goes into the config. The installer writes it to a bootstrap
-  ;    file. At its first start, the agent encrypts it with DPAPI into
-  ;    openaev-agent-token.dpapi, then deletes the bootstrap file.
-  ;    Both files get the same ACL as the config, set when each file is created. The
-  ;    .dpapi file is created empty here: the agent writes into it in place, so the
-  ;    file keeps this ACL.
-  Push "$INSTDIR\openaev-agent-token.bootstrap"
-  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;$UserSID)"
-  Call CreateProtectedFile
-  Pop $4
-  ${If} $4 == -1
-    Abort "Unable to create $INSTDIR\openaev-agent-token.bootstrap"
-  ${EndIf}
-  ClearErrors
-    FileWrite $4 "$ConfigToken"
-  FileClose $4
-  ${If} ${Errors}
-    Abort "Unable to write $INSTDIR\openaev-agent-token.bootstrap"
-  ${EndIf}
-
-  Push "$INSTDIR\openaev-agent-token.dpapi"
-  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FA;;;$UserSID)"
-  Call CreateProtectedFile
-  Pop $4
-  ${If} $4 == -1
-    Abort "Unable to create $INSTDIR\openaev-agent-token.dpapi"
-  ${EndIf}
-  FileClose $4
-
-  ; 7. Write the agent start file to launch the agent without a powershell window displayed
+  ; 6. Write the agent start file to launch the agent without a powershell window displayed
   FileOpen $4 "$INSTDIR\openaev_agent_start.ps1" w
     FileWrite $4 "Start-Process -FilePath '$INSTDIR\openaev-agent.exe' -WindowStyle Hidden"
   FileClose $4
 
-  ; 8. Register the agent to start at logon, then start it:
+  ; 7. Register the agent to start at logon, then start it:
   ;    admin -> use a scheduled task, non admin -> write in the registry and create a script to launch the agent to create a startup app
   ${If} $ConfigWithAdminPrivilege == "true"
     ; Stop the scheduled task
@@ -672,7 +639,7 @@ section "install"
     nsExec::ExecToStack "powershell.exe -ExecutionPolicy Bypass -WindowStyle hidden -File $INSTDIR\openaev_agent_start.ps1"
   ${EndIf}
 
-  ; 9. Write the uninstaller
+  ; 8. Write the uninstaller
   # Uninstaller - See function un.onInit and section "uninstall" for configuration
   writeUninstaller "$INSTDIR\uninstall.exe"
 sectionEnd

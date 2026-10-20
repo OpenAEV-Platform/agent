@@ -51,10 +51,7 @@ mod tests {
         // Reported as missing, not as a read error: the import may then write the token.
         assert!(is_missing(&store.get(TOKEN).unwrap_err()), "no file");
         fs::write(store.path(TOKEN), b"").unwrap();
-        assert!(
-            is_missing(&store.get(TOKEN).unwrap_err()),
-            "empty file created by the installer"
-        );
+        assert!(is_missing(&store.get(TOKEN).unwrap_err()), "empty file");
     }
 
     #[test]
@@ -94,7 +91,7 @@ mod tests {
     #[test]
     fn test_dpapi_store_creates_a_missing_file_with_restricted_permissions() {
         // -- PREPARE --
-        // Installed by an older installer: no .dpapi file yet.
+        // No .dpapi file yet.
         let dir = test_dir("dpapi-created");
         let store = DpapiStore::new(dir.to_path_buf());
 
@@ -116,7 +113,7 @@ mod tests {
     }
 
     #[test]
-    fn test_dpapi_store_keeps_the_file_the_installer_created() {
+    fn test_dpapi_store_rewrites_an_existing_file_in_place() {
         // -- PREPARE --
         let dir = test_dir("dpapi-in-place");
         let store = DpapiStore::new(dir.to_path_buf());
@@ -155,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn test_import_moves_the_config_token_into_the_empty_file_the_installer_created() {
+    fn test_import_moves_the_config_token_into_an_empty_dpapi_file() {
         // -- PREPARE --
         // Older install: the token is only in the config.
         let dir = test_dir("dpapi-import-config");
@@ -191,7 +188,7 @@ token = \"legacy-token\"
     #[test]
     fn test_flag_off_leaves_the_bootstrap_token_out_of_dpapi() {
         // -- PREPARE --
-        // State left by the installers: token in the bootstrap file, empty .dpapi file.
+        // Token in a bootstrap file, empty .dpapi file.
         let dir = test_dir("dpapi-flag-off");
         let bootstrap = dir.join(BOOTSTRAP_FILE);
         fs::write(&bootstrap, "bootstrap-token").unwrap();
@@ -221,8 +218,7 @@ token = \"legacy-token\"
     #[test]
     fn test_flag_off_keeps_reading_the_config_token_after_an_upgrade() {
         // -- PREPARE --
-        // Agent installed by an older installer, then upgraded (only the exe is replaced):
-        // token in the config, no bootstrap file, no .dpapi file.
+        // Token in the config, as the installers write it. No bootstrap file, no .dpapi file.
         let config_content = "debug = false
 
 [openaev]
