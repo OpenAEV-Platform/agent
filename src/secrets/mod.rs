@@ -4,7 +4,7 @@
 //! memory. The only store today is the config the installers write; OS secret stores plug in
 //! behind the same trait.
 
-mod config_store;
+pub(crate) mod config_store;
 
 pub use config_store::ConfigStore;
 
@@ -23,5 +23,5 @@ pub trait SecretStore: Send + Sync {
 
 /// Opens the store the agent reads its token from.
 pub fn open() -> Arc<dyn SecretStore> {
-    Arc::new(ConfigStore::new(Settings::config_file()))
+    Arc::new(ConfigStore::new(Settings::source()))
 }

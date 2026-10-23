@@ -13,7 +13,7 @@ use std::time::Duration;
 #[allow(clippy::too_many_arguments)]
 pub fn ping(
     uri: String,
-    secrets: Arc<dyn SecretStore>,
+    secret_store: Arc<dyn SecretStore>,
     unsecured_certificate: bool,
     with_proxy: bool,
     installation_mode: String,
@@ -22,7 +22,7 @@ pub fn ping(
     tenant_id: String,
 ) -> Result<JoinHandle<()>, Error> {
     info!("Starting ping thread");
-    let api = Client::new(uri, secrets, unsecured_certificate, with_proxy);
+    let api = Client::new(uri, secret_store, unsecured_certificate, with_proxy);
     let handle = thread::spawn(move || {
         // While no stop signal received
         while THREADS_CONTROL.load(Ordering::Relaxed) {
