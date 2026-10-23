@@ -16,13 +16,13 @@ const BEARER_PREFIX: &[u8] = b"Bearer ";
 pub struct Client {
     http_client: reqwest::blocking::Client,
     server_url: String,
-    secrets: Arc<dyn SecretStore>,
+    secret_store: Arc<dyn SecretStore>,
 }
 
 impl Client {
     pub fn new(
         server_url: String,
-        secrets: Arc<dyn SecretStore>,
+        secret_store: Arc<dyn SecretStore>,
         unsecured_certificate: bool,
         with_proxy: bool,
     ) -> Client {
@@ -54,14 +54,14 @@ impl Client {
         Client {
             http_client: http_client.build().unwrap(),
             server_url: url,
-            secrets,
+            secret_store,
         }
     }
 
     /// Reads the token from the store for this request only, so it does not stay in memory
     /// between requests.
     fn authorization(&self) -> Result<HeaderValue, Error> {
-        let token = self.secrets.get(TOKEN)?;
+        let token = self.secret_store.get(TOKEN)?;
         bearer_header(token.as_bytes())
     }
 
