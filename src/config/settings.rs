@@ -2,7 +2,7 @@ use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
 use std::env;
 use std::fmt;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 use zeroize::Zeroizing;
 
 const ENV_PRODUCTION: &str = "production";
@@ -81,39 +81,47 @@ impl Settings {
     }
 
     pub fn new() -> Result<Self, ConfigError> {
-        match Self::config_file() {
-            Some(config_file) => Self::from_file(&config_file),
-            None => {
-                let run_mode = Self::mode();
-                Config::builder()
-                    .add_source(Environment::with_prefix("openaev"))
-                    .add_source(File::with_name("config/default"))
-                    .add_source(File::with_name(&format!("config/{run_mode}")).required(false))
-                    .build()?
-                    .try_deserialize()
-            }
+        Self::source().load()
+    }
+
+    /// Where this run reads its settings from: the config file the installers write next to
+    /// the executable in production, and the `config/` folder otherwise.
+    pub fn source() -> SettingsSource {
+        if Self::mode() != ENV_PRODUCTION {
+            return SettingsSource::Development;
         }
+        // Get the current executable path
+        let current_exe_patch = env::current_exe().unwrap();
+        let parent_path = current_exe_patch.parent().unwrap();
+        // Join the expected config file with the parent
+        SettingsSource::File(parent_path.join(ENV_PRODUCTION_CONFIG_FILE))
     }
+}
 
-    /// The config file the installers write next to the executable, without its extension.
-    /// `None` in development, where the settings come from `config/`.
-    pub fn config_file() -> Option<PathBuf> {
-        (Self::mode() == ENV_PRODUCTION).then(|| {
-            // Get the current executable path
-            let current_exe_patch = env::current_exe().unwrap();
-            let parent_path = current_exe_patch.parent().unwrap();
-            // Join the expected config file with the parent
-            parent_path.join(ENV_PRODUCTION_CONFIG_FILE)
-        })
-    }
+/// Where the settings are read from, so that they can be read again later. It holds only the
+/// location, never the settings themselves, so keeping it does not keep the token in memory.
+#[derive(Clone, Debug)]
+pub enum SettingsSource {
+    /// `config/default.toml`, then `config/<env>.toml` if it exists.
+    Development,
+    /// The config file the installers write, given without its extension.
+    File(PathBuf),
+}
 
-    /// Loads the settings the way production does, from `config_file` (without its
-    /// extension).
-    pub fn from_file(config_file: &Path) -> Result<Self, ConfigError> {
-        Config::builder()
-            .add_source(Environment::with_prefix("openaev"))
-            .add_source(File::with_name(&config_file.display().to_string()).required(true))
-            .build()?
-            .try_deserialize()
+impl SettingsSource {
+    /// Reads the settings again from this source, with the `OPENAEV_*` environment variables
+    /// on top.
+    pub fn load(&self) -> Result<Settings, ConfigError> {
+        let config = Config::builder().add_source(Environment::with_prefix("openaev"));
+        let config = match self {
+            SettingsSource::Development => config
+                .add_source(File::with_name("config/default"))
+                .add_source(
+                    File::with_name(&format!("config/{}", Settings::mode())).required(false),
+                ),
+            SettingsSource::File(config_file) => config
+                .add_source(File::with_name(&config_file.display().to_string()).required(true)),
+        };
+        config.build()?.try_deserialize()
     }
 }
