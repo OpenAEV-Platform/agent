@@ -36,7 +36,7 @@ impl Client {
           "agent_executed_by_user": executed_by_user
         });
         let jobs_endpoint = format!("/api/tenants/{}/endpoints/jobs", tenant_id);
-        match self.post(&jobs_endpoint).json(&post_data).send() {
+        match self.post(&jobs_endpoint)?.json(&post_data).send() {
             Ok(response) => {
                 if response.status().is_success() {
                     response
@@ -59,7 +59,11 @@ impl Client {
     pub fn clean_job(&self, job_id: &str, tenant_id: String) -> Result<(), Error> {
         // Post the input to the OpenAEV API
         let jobs_endpoint = format!("/api/tenants/{}/endpoints/jobs/{}", tenant_id, job_id);
-        match self.delete(&jobs_endpoint).send() {
+        // The caller only checks is_ok(), so log here: otherwise a token read failure is silent.
+        let request = self
+            .delete(&jobs_endpoint)
+            .inspect_err(|err| error!("Error API clean_job {}", err))?;
+        match request.send() {
             Ok(response) => {
                 if response.status().is_success() {
                     Ok(())
