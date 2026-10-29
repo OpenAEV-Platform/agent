@@ -9,10 +9,14 @@
 //! memory.
 
 pub(crate) mod config_store;
+#[cfg(windows)]
+mod dpapi;
 mod import;
 mod replace;
 
 pub use config_store::ConfigStore;
+#[cfg(windows)]
+pub use dpapi::DpapiStore;
 #[cfg(test)]
 pub(crate) use import::cleanup_failure_message;
 pub use import::import;
@@ -128,6 +132,12 @@ pub fn recover_config() -> Option<PathBuf> {
 }
 
 /// The OS secret store of this platform, if the agent supports one here.
+#[cfg(windows)]
+fn platform_store(install_dir: &Path) -> Option<Arc<dyn SecretStore>> {
+    Some(Arc::new(DpapiStore::new(install_dir.to_path_buf())))
+}
+
+#[cfg(not(windows))]
 fn platform_store(_install_dir: &Path) -> Option<Arc<dyn SecretStore>> {
     None
 }
