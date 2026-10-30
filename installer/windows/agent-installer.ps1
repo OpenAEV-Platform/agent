@@ -243,7 +243,7 @@ Write-Output "Downloading and installing OpenAEV Agent..."
 $stagingDirectory = $null
 try {
     $stagingDirectory = New-ProtectedStagingDirectory
-    (-not $stagingDirectory) { throw "Could not create a protected staging directory, refusing to continue" }
+    if (-not $stagingDirectory) { throw "Could not create a protected staging directory, refusing to continue" }
     $downloadPath = Join-Path -Path $stagingDirectory -ChildPath "openaev-installer.exe"
     $releaseVersion = Save-VerifiedArtifact -Uri "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/package/openaev/windows/${architecture}/service" -RequestHeaders @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" } -DestinationPath $downloadPath
     Assert-NotADowngrade -InstallDirectory "${OPENAEV_INSTALL_DIR}" -Candidate $releaseVersion
