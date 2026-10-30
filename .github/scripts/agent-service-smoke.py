@@ -440,8 +440,8 @@ def main():
         # 4. Uninstall: nothing of the agent may remain.
         State.job = None
         uninstall()
-        wait_for(lambda: not INSTALL_DIR.exists(), 60, f"{INSTALL_DIR} was not removed")
-        wait_for(lambda: not service_registered(), 60, f"The service {SERVICE} is still registered")
+        wait_for(lambda: not INSTALL_DIR.exists(), 30, f"{INSTALL_DIR} was not removed")
+        wait_for(lambda: not service_registered(), 30, f"The service {SERVICE} is still registered")
         print("Agent uninstalled: service unregistered and install directory removed")
     except (AssertionError, TimeoutError, subprocess.CalledProcessError) as error:
         diagnostics()
