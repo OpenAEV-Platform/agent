@@ -8,6 +8,7 @@
 3. Hands the upgraded agent an inject job that downloads the last released
    implant and runs it. The implant must run the payload it fetches and
    report its output.
+4. Uninstalls the agent. The service and the install directory must be gone.
 
 The scripts only trust the production release key, so the mock signs what it
 serves with a throwaway key and swaps that key into the scripts it renders.
@@ -264,6 +265,39 @@ def service_pid():
     return int(match.group(1)) if match else 0
 
 
+def service_registered():
+    """Whether the service manager still knows the service."""
+    if OS == "linux":
+        output = subprocess.run(["systemctl", "list-unit-files", f"{SERVICE}.service"], capture_output=True, text=True).stdout
+        return f"{SERVICE}.service" in output
+    if OS == "macos":
+        return subprocess.run(["sudo", "launchctl", "print", f"system/io.filigran.{SERVICE}"], capture_output=True).returncode == 0
+    return subprocess.run(["sc", "query", SERVICE], capture_output=True).returncode != 1060  # ERROR_SERVICE_DOES_NOT_EXIST
+
+
+def uninstall():
+    """Uninstall as the documentation tells an administrator to.
+
+    Windows ships an uninstaller; the Linux and macOS installers do not, so
+    their steps are the commands of the "Uninstall the agent" documentation
+    sections for the system service.
+    """
+    print("--- uninstall")
+    if OS == "windows":
+        # The uninstaller copies itself aside to delete its own directory and
+        # returns at once: the directory disappearing is the end of the run.
+        subprocess.run([str(INSTALL_DIR / "uninstall.exe"), "/S"], check=True)
+    elif OS == "linux":
+        for action in (["stop", SERVICE], ["disable", SERVICE], ["daemon-reload"], ["reset-failed"]):
+            subprocess.run(["sudo", "systemctl", *action], check=True)
+        subprocess.run(["sudo", "rm", "-rf", str(INSTALL_DIR)], check=True)
+    else:
+        plist = f"/Library/LaunchDaemons/io.filigran.{SERVICE}.plist"
+        subprocess.run(["sudo", "launchctl", "bootout", "system", plist], check=True)
+        subprocess.run(["sudo", "rm", "-f", plist], check=True)
+        subprocess.run(["sudo", "rm", "-rf", str(INSTALL_DIR)], check=True)
+
+
 def installed_digest():
     try:
         return hashlib.sha256((INSTALL_DIR / BINARY).read_bytes()).hexdigest()
@@ -402,6 +436,13 @@ def main():
         check_log(IMPLANT_LOG, "Starting OpenAEV implant")
         check_log(AGENT_LOG, "Starting OpenAEV agent")
         print(f"The agent launched the implant, which ran the payload and reported {output['stdout'].strip()!r}")
+
+        # 4. Uninstall: nothing of the agent may remain.
+        State.job = None
+        uninstall()
+        wait_for(lambda: not INSTALL_DIR.exists(), 60, f"{INSTALL_DIR} was not removed")
+        wait_for(lambda: not service_registered(), 60, f"The service {SERVICE} is still registered")
+        print("Agent uninstalled: service unregistered and install directory removed")
     except (AssertionError, TimeoutError, subprocess.CalledProcessError) as error:
         diagnostics()
         print(f"::error::{error}")
