@@ -1,7 +1,10 @@
 name: Service smoke
-description: "Install the last release as a service, upgrade it to this build and launch an implant, against a mock platform"
+description: "Install the last release in an installation mode, upgrade it to this build and launch an implant, against a mock platform"
 
 inputs:
+  mode:
+    description: "Installation mode: service, service-user, session-user, or session-user-non-elevated (Windows session-user as a standard user)"
+    required: true
   os:
     description: "Runner OS family: ubuntu, windows or macos"
     required: true
@@ -29,4 +32,12 @@ runs:
     # Bash puts Git's openssl on PATH on Windows too; the mock signs with it.
     - name: Install, upgrade to this build and launch an implant
       shell: bash
-      run: python .github/scripts/agent-service-smoke.py smoke/${{ inputs.jfrog_path }}
+      env:
+        MODE: ${{ inputs.mode }}
+      run: |
+        set -euo pipefail
+        # The non-elevated variant is the session-user script with an argument.
+        script="agent-${MODE%-non-elevated}-smoke.py"
+        variant=""
+        if [[ $MODE == *-non-elevated ]]; then variant="non-elevated"; fi
+        python ".github/scripts/$script" "smoke/${{ inputs.jfrog_path }}" $variant
