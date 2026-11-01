@@ -1,0 +1,39 @@
+name: Tests
+description: "Run the test suite for one target"
+
+inputs:
+  os:
+    description: "Runner OS family: ubuntu, windows or macos"
+    required: true
+  arch:
+    description: "Architecture: x86_64 or arm64"
+    required: true
+  target:
+    description: "Rust target triple to test"
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Install musl-tools
+      if: inputs.os == 'ubuntu' && contains(inputs.target, 'musl')
+      run: sudo apt-get update && sudo apt-get install -y musl-tools
+      shell: bash
+
+    - name: Set up Rust and cache
+      uses: ./.github/actions/setup-rust
+      with:
+        cache-key: tests
+        targets: ${{ inputs.target }}
+
+    # Windows keeps the runner's default shell: Git Bash would put its own Unix
+    # tools (whoami, sh...) ahead of the Windows ones in the tests' PATH.
+    - name: Run cargo test
+      if: inputs.os != 'windows'
+      run: cargo test --target=${{ inputs.target }} --locked
+      shell: bash
+
+    - name: Run cargo test (Windows)
+      if: inputs.os == 'windows'
+      run: cargo test --target=${{ inputs.target }} --locked
+      shell: pwsh

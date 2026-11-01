@@ -1,0 +1,37 @@
+name: "Set up Rust"
+description: "Install the Rust toolchain and restore the cargo cache, which only main saves."
+
+inputs:
+  cache-key:
+    description: "Cache key, unique per job (e.g. 'os-trust', 'clippy'). The OS, architecture, rustc version and Cargo.lock are added to it."
+    required: true
+  targets:
+    description: "Comma-separated rustup targets to add."
+    required: false
+    default: ""
+  components:
+    description: "Comma-separated rustup components to add."
+    required: false
+    default: ""
+  cache-target:
+    description: "Whether to include target/ in the cache (fast check-only jobs may skip it)."
+    required: false
+    default: "true"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: ${{ inputs.targets }}
+        components: ${{ inputs.components }}
+
+    # Pull requests restore main's cache but never save their own: a PR's entry
+    # is only visible to that PR and would evict main's from the cache quota.
+    - name: Cache
+      uses: Swatinem/rust-cache@v2
+      with:
+        key: ${{ inputs.cache-key }}
+        cache-targets: ${{ inputs.cache-target }}
+        save-if: ${{ github.ref == 'refs/heads/main' }}

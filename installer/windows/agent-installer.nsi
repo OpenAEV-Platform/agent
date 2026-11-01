@@ -357,22 +357,86 @@ Function nsDialogsPageLeave
   ${EndIf}
 FunctionEnd
 
+; CreateProtectedFile
+;   Creates a new file with the given security descriptor (SDDL) and returns a
+;   write handle for FileWrite and FileClose, or -1 on failure (including when the
+;   file already exists). The ACL is set by the call that creates the file, and
+;   the handle is not shared: no other process can open the file before it is
+;   closed. Creating the file first and restricting it afterwards would leave a
+;   window where a handle opened with the folder's ACL keeps reading what is
+;   written later: changing an ACL does not revoke open handles.
+; Usage:
+;   Push <path>
+;   Push <SDDL>
+;   Call CreateProtectedFile
+;   Pop <handle>
+Function CreateProtectedFile
+  ; 1. Read the arguments and save the registers used ($3 = handle, -1 until created)
+  Exch $0 ; SDDL
+  Exch
+  Exch $1 ; path
+  Push $2
+  Push $3
+  StrCpy $3 -1
+
+  ; 2. Convert the SDDL string into a security descriptor
+  System::Call 'advapi32::ConvertStringSecurityDescriptorToSecurityDescriptorW(w r0, i 1, *p .r2, p 0) i .r0' ; SDDL_REVISION_1
+  ${If} $0 != 0
+    ; 3. Wrap the security descriptor in a SECURITY_ATTRIBUTES structure
+    System::Call '*(&l4, p r2, i 0) p .r0' ; SECURITY_ATTRIBUTES
+    ; 4. Create the file with this ACL
+    ;    GENERIC_WRITE, no sharing, CREATE_NEW, FILE_ATTRIBUTE_NORMAL
+    System::Call 'kernel32::CreateFileW(w r1, i 0x40000000, i 0, p r0, i 1, i 0x80, p 0) p .r3'
+    ; 5. Free the SECURITY_ATTRIBUTES structure and the security descriptor
+    System::Free $0
+    System::Call 'kernel32::LocalFree(p r2)'
+  ${EndIf}
+
+  ; 6. Restore the registers and return the handle (-1 on failure)
+  StrCpy $0 $3
+  Pop $3
+  Pop $2
+  Pop $1
+  Exch $0
+FunctionEnd
+
 section "install"
   # Files for the install directory - to build the installer, these should be in the same directory as the install script (this file)
   setOutPath $INSTDIR
 
-  ;stopping existing service
+  ; 1. Stop the existing service
   ExecWait 'sc stop $ServiceName' $0
 
-  ;deleting existing service
+  ; 2. Delete the existing service
   ExecWait 'sc delete $ServiceName' $0
 
+  ; 3. Copy the agent binary and icon
   # Files added here should be removed by the uninstaller (see section "uninstall")
   file "..\..\target\release\openaev-agent.exe"
   file "openaev.ico"
-  
-  ; write agent config file
-  FileOpen $4 "$INSTDIR\openaev-agent-config.toml" w
+
+  ; 4. Delete the previous config, so its ACL and owner are never reused: the new
+  ;    file is created from scratch in step 5.
+  ClearErrors
+  Delete "$INSTDIR\openaev-agent-config.toml"
+  ${If} ${Errors}
+    Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+
+  ; 5. Create the config with a restricted ACL.
+  ;    The config holds the token. Without an explicit ACL it inherits the folder's,
+  ;    which lets every local user read it. Only SYSTEM (the service account) and
+  ;    Administrators get access. Well-known SIDs, not names: account names are localized.
+  Push "$INSTDIR\openaev-agent-config.toml"
+  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)"
+  Call CreateProtectedFile
+  Pop $4
+  ${If} $4 == -1
+    Abort "Unable to create $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
+
+  ; 6. Write the agent config (FileWrite only sets the error flag on failure)
+  ClearErrors
     FileWrite $4 "debug=false$\r$\n"
     FileWrite $4 "[openaev]$\r$\n"
     FileWrite $4 "url = $\"$ConfigURL$\"$\r$\n"
@@ -385,16 +449,20 @@ section "install"
     FileWrite $4 "tenant_id = $\"$ConfigTenantId$\"$\r$\n"
     FileWrite $4 "$\r$\n" ; newline
   FileClose $4
+  ${If} ${Errors}
+    Abort "Unable to write $INSTDIR\openaev-agent-config.toml"
+  ${EndIf}
 
-  ; register windows service
+  ; 7. Register the Windows service
   ExecWait 'sc create $ServiceName error="severe" displayname="${displayName}" type="own" start="auto" binpath="$INSTDIR\openaev-agent.exe"'
 
-  ; configure restart in case of failure
+  ; 8. Configure restart in case of failure
   ExecWait 'sc failure $ServiceName reset= 0 actions= restart/60000/restart/60000/restart/60000'
 
-  ; start the service
+  ; 9. Start the service
   ExecWait 'sc start $ServiceName'
 
+  ; 10. Write the uninstaller
   # Uninstaller - See function un.onInit and section "uninstall" for configuration
   writeUninstaller "$INSTDIR\uninstall.exe"
 
@@ -518,12 +586,12 @@ function un.onInit
 functionEnd
 
 section "uninstall"
-  ;stopping existing service
+  ; 1. Stop the service
   ExecWait 'sc stop $ServiceName' $0
 
-  ; unregister service
+  ; 2. Unregister the service
   ExecWait 'sc delete $ServiceName'
 
-  ; delete everything
+  ; 3. Delete the install directory
 	RMDir /r $INSTDIR
 sectionEnd

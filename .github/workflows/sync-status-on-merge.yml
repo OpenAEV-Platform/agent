@@ -29,6 +29,7 @@ jobs:
         with:
           app-id: ${{ secrets.OPENAEV_PR_CHECKS_APP_ID }}
           private-key: ${{ secrets.OPENAEV_PR_CHECKS_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
 
       - name: Sync status
         uses: FiligranHQ/filigran-ci-tools/actions/sync-status-on-merge@main

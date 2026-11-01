@@ -69,20 +69,48 @@ mod tests {
         let res_with_unsecured_certificate = client_with_unsecured_certificate.get("").send();
 
         // -- ASSERT --
-        assert!(
-            res_without_unsecured_certificate.is_err(),
-            "Client should not bypass the bad ssl"
-        );
-
-        // If network/DNS is unavailable, this external integration call can fail for reasons
-        // unrelated to certificate validation; in that case we skip the success assertion.
-        if res_with_unsecured_certificate.is_err() {
-            return;
+        match (
+            res_without_unsecured_certificate,
+            res_with_unsecured_certificate,
+        ) {
+            // the unsecured client still completes the handshake, so its failure means the host is down
+            (_, Err(err)) => eprintln!("skipped, {bad_ssl_url} is unreachable: {err}"),
+            (Err(_), Ok(_)) => {}
+            (Ok(_), Ok(_)) => panic!("Client should not bypass the bad ssl"),
         }
+    }
 
+    #[test]
+    fn test_valid_certificate_is_accepted() {
+        // -- PREPARE --
+        let valid_ssl_url = "https://sha256.badssl.com/";
+        let client = Client::new(valid_ssl_url.to_string(), TOKEN.to_string(), false, false);
+        let reachability_probe =
+            Client::new(valid_ssl_url.to_string(), TOKEN.to_string(), true, false);
+
+        // -- EXECUTE & ASSERT --
+        let Err(err) = client.get("").send() else {
+            return;
+        };
+        // the probe skips chain validation, so its own failure means the host is down
+        match reachability_probe.get("").send() {
+            Ok(_) => panic!("Client should trust a publicly valid certificate: {err}"),
+            Err(probe_err) => eprintln!("skipped, {valid_ssl_url} is unreachable: {probe_err}"),
+        }
+    }
+
+    #[test]
+    #[ignore = "requires the os-trust-store CI job"]
+    fn test_os_trust_store_is_consulted() {
+        // -- PREPARE --
+        let url = env::var("OAEV_OS_TRUST_URL")
+            .expect("OAEV_OS_TRUST_URL must be set by the os-trust-store CI job");
+        let client = Client::new(url, TOKEN.to_string(), false, false);
+
+        // -- EXECUTE & ASSERT --
         assert!(
-            res_with_unsecured_certificate.is_ok(),
-            "Client should bypass the bad ssl"
+            client.get("").send().is_ok(),
+            "Client should trust a CA present only in the OS trust store"
         );
     }
 }

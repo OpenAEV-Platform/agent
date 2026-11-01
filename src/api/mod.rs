@@ -25,6 +25,13 @@ impl Client {
             .connect_timeout(Duration::from_secs(2))
             .timeout(Duration::from_secs(5))
             .user_agent(format!("openaev-agent/{VERSION}"));
+        // reqwest 0.13's `rustls` feature trusts the OS store only; add the bundled Mozilla roots
+        // back so trust stays what it was under 0.12's rustls-tls + rustls-tls-native-roots.
+        for root in webpki_root_certs::TLS_SERVER_ROOT_CERTS {
+            if let Ok(cert) = reqwest::Certificate::from_der(root.as_ref()) {
+                http_client = http_client.add_root_certificate(cert);
+            }
+        }
         if !with_proxy {
             http_client = http_client.no_proxy();
         }
