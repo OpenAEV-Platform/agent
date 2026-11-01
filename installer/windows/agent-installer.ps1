@@ -25,6 +25,29 @@ $TrustedReleaseKeys = @(
     '<RSAKeyValue><Modulus>zDsBUGZLu7Jp4+lXdhCCfZ/bq8aoDdMt3U8UjLQ8LfpZ2Suc9rMzyQ6zSftlAPSiXgVgPnZSrwJcYMoO/kVEMAPdHrHF7tRhD2jNhNWfNg6VNHF54JqdoMvP7z9+YI+h8PqjrlQoUZ45V7uH9OadKgiq89YMJDlYm+j2XO5uafWt33fx0tmSmboZGriA1IRbSKrblncZyCQWx/XjsQ/3nWKXIiM4IQx2QwS7rr2Zs4DiJSECbc85dHYSyBn5y5mS/OiWL9tZj5Lbu8AIVSMbc6fC45Rvn+I11kDD3xu4Q1ziYuB2NtEoArFo8Pk1cQJ1VygTty2aYkL5+uF+xTNzGhd4tZg1nRq3aG7GJXPl13hfEy6NPZJDy1XMvWxwN6yeX5b72Hv7RKVDZNXgLM0WQkp1EfxsUv13RFL23ZvKmCjkd/QHT7J0XyD6hyBzRo2PrYUwvkjVDpPfdp8Ity5PiwwdtdkT36DnCloPKu+1eVpvCB7nF1mAfzmZ19kj7yhHViUWQff6FdvUrGh3sY78TLkcWta0anwH9NCGZSEaIQTapSYiMNDYoeX58UWeHznfOfcGjGYJAbwV0Ti2JG3/otAdRmDUkeRaD/SqdFlP/GQhkwy+Zg/ME+ic1VYR43N2l9SsChsNJ1QsaN9qwWawDrlbG8kvFYKOkGM4uuFmHK8=</Modulus><Exponent>AQAB</Exponent></RSAKeyValue>'
 )
 
+# Skips TLS certificate validation only when the platform explicitly runs with
+# an unsecured (e.g. self-signed) certificate, and only for this one request:
+# the previous callback is restored in finally, so a request that throws never
+# leaves validation disabled for the rest of the PowerShell session. The
+# artifact signature check still applies to what is downloaded.
+function Invoke-PlatformWebRequest
+{
+    param([Parameter(Mandatory = $true)][hashtable] $Parameters)
+    $previousCallback = [System.Net.ServicePointManager]::ServerCertificateValidationCallback
+    if ("${OPENAEV_UNSECURED_CERTIFICATE}" -eq "true")
+    {
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+    }
+    try
+    {
+        return Invoke-WebRequest @Parameters
+    }
+    finally
+    {
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = $previousCallback
+    }
+}
+
 function New-ProtectedStagingDirectory
 {
     [CmdletBinding(SupportsShouldProcess)]
@@ -143,7 +166,7 @@ function Save-VerifiedArtifact
         [Parameter(Mandatory = $true)][hashtable] $RequestHeaders,
         [Parameter(Mandatory = $true)][string] $DestinationPath
     )
-    $response = Invoke-WebRequest -Uri $Uri -Headers $RequestHeaders -UseBasicParsing
+    $response = Invoke-PlatformWebRequest -Parameters @{ Uri = $Uri; Headers = $RequestHeaders; UseBasicParsing = $true }
     $content = $response.RawContentStream.ToArray()
 
     $signature = Get-HeaderValue -ResponseHeaders $response.Headers -Name $SignatureHeader

@@ -114,6 +114,14 @@ record_release_version() {
 # ----------------------------------------------------------------------------
 
 base_url=${OPENAEV_URL}
+
+# Skip TLS certificate validation only when the platform explicitly runs with
+# an unsecured (e.g. self-signed) certificate. The artifact signature check
+# above still applies, so this never lets a tampered binary through.
+curl_insecure=""
+if [ "${OPENAEV_UNSECURED_CERTIFICATE}" = "true" ]; then
+  curl_insecure="-k"
+fi
 architecture=$(uname -m)
 
 install_dir="${OPENAEV_INSTALL_DIR}"
@@ -147,7 +155,7 @@ workdir=$(mktemp -d "${install_dir}/.openaev-stage-XXXXXX") || fail_integrity "C
 trap 'rm -rf "$workdir"' EXIT INT TERM
 hdr="${workdir}/curl.conf"
 (umask 077; printf 'header = "Authorization: Bearer %s"\n' "${OPENAEV_TOKEN}" > "$hdr")
-curl -sSfL --config "$hdr" -D "${workdir}/headers" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o "${workdir}/openaev-agent"
+curl -sSfL ${curl_insecure} --config "$hdr" -D "${workdir}/headers" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o "${workdir}/openaev-agent"
 
 verify_release_artifact "$workdir" "${workdir}/headers" "${workdir}/openaev-agent"
 release_version=$(header_value "${workdir}/headers" "$VERSION_HEADER")
@@ -187,7 +195,7 @@ echo "01. Installing OpenAEV Agent..."
 openaev_session=$(printf %s "${session_name}" | sed 's/openbas/openaev/g')
 hdr=$(mktemp); umask 077
 printf 'header = "Authorization: Bearer %s"\n' "${OPENAEV_TOKEN}" > "$hdr"
-curl -sSfLG --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" | sh
+curl -sSfLG ${curl_insecure} --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" | sh
 rm -f "$hdr"
 
 echo "02. Uninstalling OpenBAS Agent..."
