@@ -31,5 +31,10 @@
         ],
         rebaseWhen: 'auto',
         enabled: true,
+        // revisit the branch on weekdays so the release age check can turn green
+        updateNotScheduled: true,
+        // open the PR once that check is green; CI then runs on the PR
+        prCreation: 'not-pending',
+        internalChecksAsSuccess: true,
     },
 }
