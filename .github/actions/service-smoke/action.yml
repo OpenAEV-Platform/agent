@@ -1,5 +1,5 @@
 name: Service smoke
-description: "Install the last release as a service, upgrade it to this build and launch an implant, against a mock platform"
+description: "Install the last release as a service, upgrade it to this build, launch an implant and uninstall, against a mock platform"
 
 inputs:
   os:
@@ -27,6 +27,6 @@ runs:
         path: smoke
 
     # Bash puts Git's openssl on PATH on Windows too; the mock signs with it.
-    - name: Install, upgrade to this build and launch an implant
+    - name: Install, upgrade to this build, launch an implant and uninstall
       shell: bash
       run: python .github/scripts/agent-service-smoke.py smoke/${{ inputs.jfrog_path }}
