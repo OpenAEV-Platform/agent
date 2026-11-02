@@ -31,8 +31,10 @@
         ],
         rebaseWhen: 'auto',
         enabled: true,
-        // open the PR only once minimumReleaseAge and CI are done
+        // revisit the branch on weekdays so the release age check can turn green
+        updateNotScheduled: true,
+        // open the PR once that check is green; CI then runs on the PR
         prCreation: 'not-pending',
-        prNotPendingHours: 96,
+        internalChecksAsSuccess: true,
     },
 }
