@@ -91,8 +91,8 @@ impl Settings {
             return SettingsSource::Development;
         }
         // Get the current executable path
-        let current_exe_patch = env::current_exe().unwrap();
-        let parent_path = current_exe_patch.parent().unwrap();
+        let current_exe_path = env::current_exe().unwrap();
+        let parent_path = current_exe_path.parent().unwrap();
         // Join the expected config file with the parent
         SettingsSource::File(parent_path.join(ENV_PRODUCTION_CONFIG_FILE))
     }
