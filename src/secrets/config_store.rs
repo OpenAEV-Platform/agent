@@ -2,6 +2,7 @@ use super::{SecretStore, TOKEN};
 use crate::common::error_model::Error;
 use crate::config::settings::SettingsSource;
 use config::ConfigError;
+use log::error;
 use std::io;
 use zeroize::Zeroizing;
 
@@ -24,10 +25,12 @@ impl SecretStore for ConfigStore {
             return Err(Error::Internal(format!("no secret named {name}")));
         }
         let settings = self.source.load().map_err(|err| {
-            Error::Internal(format!(
+            let message = format!(
                 "Unable to read token from agent configuration: {}",
                 reason(&err)
-            ))
+            );
+            error!("{message}");
+            Error::Internal(message)
         })?;
         Ok(settings.openaev.token)
     }
