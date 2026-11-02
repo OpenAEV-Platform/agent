@@ -13,8 +13,9 @@
 //! - If the password of a local service account is reset (not changed), its DPAPI key is
 //!   lost. The agent then needs to be reinstalled.
 
-use super::{missing, SecretStore};
+use super::SecretStore;
 use crate::common::error_model::Error;
+use log::error;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io;
@@ -44,20 +45,17 @@ impl DpapiStore {
 impl SecretStore for DpapiStore {
     fn get(&self, name: &str) -> Result<Zeroizing<String>, Error> {
         let path = self.path(name);
-        let blob = match fs::read(&path) {
-            Ok(blob) => blob,
-            Err(err) if err.kind() == ErrorKind::NotFound => Vec::new(),
-            Err(err) => return Err(Error::Io(err)),
-        };
-        // A missing or empty file means no token was saved yet. It is reported as missing,
-        // not as a read error, so the config token can still be imported.
-        if blob.is_empty() {
-            return Err(missing(format!(
-                "no {name} in {}, reinstall the agent to provide one",
-                path.display()
-            )));
-        }
-        let plain = unprotect(&blob)?;
+        let plain = fs::read(&path)
+            .map_err(Error::Io)
+            .and_then(|blob| unprotect(&blob))
+            .map_err(|err| {
+                let message = format!(
+                    "Unable to read the {name} from {}: {err}. Reinstall the agent",
+                    path.display()
+                );
+                error!("{message}");
+                Error::Internal(message)
+            })?;
         let value = std::str::from_utf8(&plain).map_err(|_| {
             Error::Internal(format!("the {name} in {} is not text", path.display()))
         })?;
