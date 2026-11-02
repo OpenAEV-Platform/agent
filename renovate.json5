@@ -31,5 +31,8 @@
         ],
         rebaseWhen: 'auto',
         enabled: true,
+        // open the PR only once minimumReleaseAge and CI are done
+        prCreation: 'not-pending',
+        prNotPendingHours: 96,
     },
 }
