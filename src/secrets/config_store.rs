@@ -1,38 +1,28 @@
-use super::{missing, read_bootstrap, SecretStore, TOKEN};
+use super::{SecretStore, TOKEN};
 use crate::common::error_model::Error;
 use crate::config::settings::SettingsSource;
 use config::ConfigError;
 use log::error;
 use std::io;
-use std::path::PathBuf;
 use zeroize::Zeroizing;
 
-/// Reads the token in clear text: from the bootstrap file if there is one, otherwise from the
-/// config file.
-///
-/// The agent uses this store when the platform has no supported OS secret store yet, or when
-/// moving the token there failed. The token is read again each time it is needed, and never
-/// kept in memory.
+/// The token in the config, where the installers write it. Read again on each use, never
+/// kept in memory. The agent uses it when the platform has no OS secret store.
 pub struct ConfigStore {
-    /// The bootstrap file, read first.
-    bootstrap: PathBuf,
     /// Where the settings are read from. It holds no setting, so no token either.
     source: SettingsSource,
 }
 
 impl ConfigStore {
-    pub fn new(bootstrap: PathBuf, source: SettingsSource) -> Self {
-        ConfigStore { bootstrap, source }
+    pub fn new(source: SettingsSource) -> Self {
+        ConfigStore { source }
     }
 }
 
 impl SecretStore for ConfigStore {
     fn get(&self, name: &str) -> Result<Zeroizing<String>, Error> {
         if name != TOKEN {
-            return Err(missing(format!("no secret named {name}")));
-        }
-        if let Some(token) = read_bootstrap(&self.bootstrap)? {
-            return Ok(token);
+            return Err(Error::Internal(format!("no secret named {name}")));
         }
         let settings = self.source.load().map_err(|err| {
             let message = format!(
@@ -45,7 +35,7 @@ impl SecretStore for ConfigStore {
         settings
             .openaev
             .token
-            .ok_or_else(|| missing("no token in the agent config".to_string()))
+            .ok_or_else(|| Error::Internal("no token in the agent config".to_string()))
     }
 
     fn set(&self, _name: &str, _value: &str) -> Result<(), Error> {

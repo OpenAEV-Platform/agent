@@ -12,10 +12,9 @@ const ENV_PRODUCTION_CONFIG_FILE: &str = "openaev-agent-config";
 #[allow(unused)]
 pub struct OpenAEV {
     pub url: String,
-    // Optional: once the token is moved to the OS secret store, it is no longer in the config.
-    // It is wrapped in `Zeroizing` as soon as it is read, so its memory is wiped wherever it
-    // is dropped. The config crate makes its own copies while loading the file, and those are
-    // not wiped. Once the token is in the OS secret store, those copies no longer exist.
+    // Optional: the config has no token once it is moved to the OS secret store.
+    // Zeroizing from deserialization on, so that every path that drops it wipes it. The
+    // copies the config crate makes while loading the file are not.
     pub token: Option<Zeroizing<String>>,
     pub unsecured_certificate: bool,
     pub with_proxy: bool,
@@ -68,15 +67,6 @@ impl Default for CleanupSettings {
     }
 }
 
-/// The `[secrets]` table of the config. Every key is optional.
-#[derive(Debug, Deserialize, Clone, Default)]
-pub struct SecretsSettings {
-    /// Feature flag: moves the token into the OS secret store (DPAPI on Windows). Off by
-    /// default while other systems have no store yet. Turned on with `os_store = true`.
-    #[serde(default)]
-    pub os_store: bool,
-}
-
 #[derive(Debug, Deserialize, Clone)]
 #[allow(unused)]
 pub struct Settings {
@@ -84,8 +74,6 @@ pub struct Settings {
     pub openaev: OpenAEV,
     #[serde(default)]
     pub cleanup: CleanupSettings,
-    #[serde(default)]
-    pub secrets: SecretsSettings,
 }
 
 impl Settings {
@@ -93,7 +81,7 @@ impl Settings {
         env::var("env").unwrap_or_else(|_| ENV_PRODUCTION.into())
     }
 
-    /// The directory of the executable, where the installers put the config and the token.
+    /// The directory of the executable, where the installers put the config.
     pub fn install_dir() -> PathBuf {
         let current_exe_path = env::current_exe().unwrap();
         current_exe_path.parent().unwrap().to_path_buf()
