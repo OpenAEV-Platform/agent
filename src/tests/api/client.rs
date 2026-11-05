@@ -4,8 +4,26 @@ const TOKEN: &str = "token";
 mod tests {
     use crate::api::{Client, AUTHORIZATION_HEADER};
     use crate::tests::api::client::TOKEN;
+    use crate::tests::api::tls_server::serve_self_signed_https;
     use mockito;
     use std::env;
+    use std::error::Error;
+    use std::io;
+
+    fn is_invalid_certificate(err: &reqwest::Error) -> bool {
+        let mut current: Option<&(dyn Error + 'static)> = Some(err);
+        while let Some(e) = current {
+            if let Some(rustls::Error::InvalidCertificate(_)) = e.downcast_ref::<rustls::Error>() {
+                return true;
+            }
+            // io::Error::source() skips the error it wraps, so step into it explicitly
+            current = match e.downcast_ref::<io::Error>().and_then(io::Error::get_ref) {
+                Some(inner) => Some(inner),
+                None => e.source(),
+            };
+        }
+        false
+    }
 
     #[test]
     fn test_client_headers() {
@@ -57,46 +75,48 @@ mod tests {
     #[test]
     fn test_unsecured_certificate_acceptance() {
         // -- PREPARE --
-        let bad_ssl_url = "https://self-signed.badssl.com/";
-
+        let url = serve_self_signed_https();
         let client_without_unsecured_certificate =
-            Client::new(bad_ssl_url.to_string(), TOKEN.to_string(), false, false);
-        let client_with_unsecured_certificate =
-            Client::new(bad_ssl_url.to_string(), TOKEN.to_string(), true, true);
+            Client::new(url.clone(), TOKEN.to_string(), false, false);
+        let client_with_unsecured_certificate = Client::new(url, TOKEN.to_string(), true, false);
 
         // -- EXECUTE --
         let res_without_unsecured_certificate = client_without_unsecured_certificate.get("").send();
         let res_with_unsecured_certificate = client_with_unsecured_certificate.get("").send();
 
         // -- ASSERT --
-        match (
-            res_without_unsecured_certificate,
-            res_with_unsecured_certificate,
-        ) {
-            // the unsecured client still completes the handshake, so its failure means the host is down
-            (_, Err(err)) => eprintln!("skipped, {bad_ssl_url} is unreachable: {err}"),
-            (Err(_), Ok(_)) => {}
-            (Ok(_), Ok(_)) => panic!("Client should not bypass the bad ssl"),
-        }
+        assert!(
+            res_without_unsecured_certificate
+                .as_ref()
+                .is_err_and(is_invalid_certificate),
+            "Client should reject the self-signed certificate: {:?}",
+            res_without_unsecured_certificate
+        );
+        assert!(
+            res_with_unsecured_certificate.is_ok(),
+            "Client should bypass the bad ssl when unsecured: {:?}",
+            res_with_unsecured_certificate.err()
+        );
     }
 
     #[test]
-    fn test_valid_certificate_is_accepted() {
+    #[ignore = "requires the os-trust-store CI job"]
+    fn test_bundled_roots_are_trusted() {
         // -- PREPARE --
-        let valid_ssl_url = "https://sha256.badssl.com/";
-        let client = Client::new(valid_ssl_url.to_string(), TOKEN.to_string(), false, false);
-        let reachability_probe =
-            Client::new(valid_ssl_url.to_string(), TOKEN.to_string(), true, false);
+        // the CI job empties the OS trust store, so only the bundled roots can validate this URL
+        let url = env::var("OAEV_BUNDLED_ROOTS_URL")
+            .expect("OAEV_BUNDLED_ROOTS_URL must be set by the os-trust-store CI job");
+        let client = Client::new(url, TOKEN.to_string(), false, false);
 
-        // -- EXECUTE & ASSERT --
-        let Err(err) = client.get("").send() else {
-            return;
-        };
-        // the probe skips chain validation, so its own failure means the host is down
-        match reachability_probe.get("").send() {
-            Ok(_) => panic!("Client should trust a publicly valid certificate: {err}"),
-            Err(probe_err) => eprintln!("skipped, {valid_ssl_url} is unreachable: {probe_err}"),
-        }
+        // -- EXECUTE --
+        let res = client.get("").send();
+
+        // -- ASSERT --
+        assert!(
+            res.is_ok(),
+            "Client should trust a public certificate through its bundled roots: {:?}",
+            res.err()
+        );
     }
 
     #[test]
