@@ -28,6 +28,14 @@ features = [
     "serde",
 ]
 
+[dependencies.toml_edit]
+version = "0.25.17"
+features = [
+    "parse",
+    "display",
+]
+default-features = false
+
 [dependencies.serde]
 version = "1.0.203"
 features = [

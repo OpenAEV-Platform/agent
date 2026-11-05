@@ -26,6 +26,16 @@ mod tests {
     }
 
     #[test]
+    fn test_config_store_refuses_writes() {
+        // -- PREPARE --
+        let dir = test_dir("config-store-write");
+        let (store, _) = store_in(&dir);
+
+        // -- EXECUTE & ASSERT --
+        assert!(store.set(TOKEN, "first-token").is_err());
+    }
+
+    #[test]
     fn test_config_store_only_holds_the_token() {
         // -- PREPARE --
         let dir = test_dir("config-store-name");
@@ -108,7 +118,7 @@ mod tests {
         };
         let no_token = no_token.to_string();
         assert!(
-            no_token.contains("the setting `openaev.token` is missing"),
+            no_token.contains("no token in the agent config"),
             "{no_token}"
         );
         assert_eq!(repaired.unwrap().as_str(), "first-token");

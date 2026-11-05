@@ -1,4 +1,5 @@
 mod config_store_tests;
+mod import_tests;
 
 use crate::common::error_model::Error;
 use crate::secrets::SecretStore;
@@ -11,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use zeroize::Zeroizing;
 
-/// A secret store kept in memory, standing in for a real one.
+/// A secret store kept in memory, standing in for the OS one.
 #[derive(Default)]
 pub struct MemoryStore {
     secrets: Mutex<HashMap<String, String>>,
@@ -42,14 +43,26 @@ impl SecretStore for MemoryStore {
             .map(|value| Zeroizing::new(value.clone()))
             .ok_or_else(|| Error::Internal(format!("no secret named {name}")))
     }
+
+    fn set(&self, name: &str, value: &str) -> Result<(), Error> {
+        self.secrets
+            .lock()
+            .unwrap()
+            .insert(name.to_string(), value.to_string());
+        Ok(())
+    }
 }
 
-/// A secret store that cannot be read.
+/// A secret store that cannot be read or written, like an OS store that is unavailable.
 pub struct FailingStore;
 
 impl SecretStore for FailingStore {
-    fn get(&self, name: &str) -> Result<Zeroizing<String>, Error> {
-        Err(Error::Internal(format!("no secret named {name}")))
+    fn get(&self, _name: &str) -> Result<Zeroizing<String>, Error> {
+        Err(Error::Internal("store unavailable".to_string()))
+    }
+
+    fn set(&self, _name: &str, _value: &str) -> Result<(), Error> {
+        Err(Error::Internal("store unavailable".to_string()))
     }
 }
 

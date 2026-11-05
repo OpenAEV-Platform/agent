@@ -7,7 +7,7 @@ use std::io;
 use zeroize::Zeroizing;
 
 /// The token in the config, where the installers write it. Read again on each use, never
-/// kept in memory.
+/// kept in memory. The agent uses it when the platform has no OS secret store.
 pub struct ConfigStore {
     /// Where the settings are read from. It holds no setting, so no token either.
     source: SettingsSource,
@@ -32,7 +32,16 @@ impl SecretStore for ConfigStore {
             error!("{message}");
             Error::Internal(message)
         })?;
-        Ok(settings.openaev.token)
+        settings
+            .openaev
+            .token
+            .ok_or_else(|| Error::Internal("no token in the agent config".to_string()))
+    }
+
+    fn set(&self, _name: &str, _value: &str) -> Result<(), Error> {
+        Err(Error::Internal(
+            "the agent does not write secrets to its config".to_string(),
+        ))
     }
 }
 
