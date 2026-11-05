@@ -6,9 +6,13 @@
 //! Either way, the token is read each time it is needed, instead of being kept in memory.
 
 pub(crate) mod config_store;
+#[cfg(windows)]
+mod dpapi;
 mod import;
 
 pub use config_store::ConfigStore;
+#[cfg(windows)]
+pub use dpapi::DpapiStore;
 pub use import::import;
 
 use crate::common::error_model::Error;
@@ -47,6 +51,12 @@ pub fn open(config_token: Option<Zeroizing<String>>) -> Arc<dyn SecretStore> {
 }
 
 /// The OS secret store of this platform, if the agent supports one here.
+#[cfg(windows)]
+fn platform_store() -> Option<Arc<dyn SecretStore>> {
+    Some(Arc::new(DpapiStore::new(Settings::install_dir())))
+}
+
+#[cfg(not(windows))]
 fn platform_store() -> Option<Arc<dyn SecretStore>> {
     None
 }
