@@ -1,7 +1,6 @@
 name: Smoke
 description: "Start the built agent against an unreachable platform and check it loads its config and keeps running"
 
-
 inputs:
   artifact:
     description: "Build artifact suffix (agent-bin-<artifact>)"
