@@ -525,9 +525,26 @@ def diagnostics():
     print(f"--- pid: {agent_pid()}")
     print(f"--- registrations: {State.registrations}")
     print(f"--- implant downloads: {State.implant_downloads}, callbacks: {json.dumps(State.callbacks)}")
+    # What the agent really created: tells a log in another place from one that was never written.
+    print(f"--- {AGENT_DIR / 'runtimes'}")
+    runtimes = AGENT_DIR / "runtimes"
+    if OS == "windows":
+        subprocess.run(
+            [
+                "powershell", "-NoProfile", "-NonInteractive", "-Command",
+                f"Get-ChildItem -Recurse -Force '{runtimes}' | Select-Object FullName, Length, LastWriteTime"
+                " | Format-Table -AutoSize | Out-String -Width 300",
+            ]
+        )
+    else:
+        subprocess.run(["sudo", "ls", "-laR", str(runtimes)])
     for log in (AGENT_LOG, AGENT_DIR / "runner.log", LAUNCHER_LOG, IMPLANT_LOG):
         print(f"--- {log}")
-        print(read_log(log) or "(missing)")
+        content = read_file(log)
+        if content is None:
+            print("(missing or unreadable)")
+        else:
+            print(content.decode(errors="replace") or "(empty)")
 
 
 def main():
