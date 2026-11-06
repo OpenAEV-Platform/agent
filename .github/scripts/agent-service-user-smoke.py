@@ -330,7 +330,9 @@ def create_account(directory):
     if OS == "windows":
         script = directory / "account.ps1"
         script.write_text(WINDOWS_ACCOUNT_SCRIPT)
-        subprocess.run(["net", "user", ACCOUNT, PASSWORD, "/add"], check=True)
+        # `net user` asks to confirm a password over 14 characters: answer it,
+        # there is no console to do so in CI.
+        subprocess.run(["net", "user", ACCOUNT, PASSWORD, "/add"], input="Y\n", text=True, check=True)
         subprocess.run(
             [
                 "powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
