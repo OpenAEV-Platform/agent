@@ -347,7 +347,9 @@ def user_systemctl(*args):
 def create_account(scripts):
     """The account the agent runs as. On Linux it has a user manager of its own, as when it is logged in."""
     if OS == "windows":
-        subprocess.run(["net", "user", ACCOUNT, PASSWORD, "/add"], check=True)
+        # `net user` asks to confirm a password over 14 characters: answer it,
+        # there is no console to do so in CI. The non-elevated variant has an empty password.
+        subprocess.run(["net", "user", ACCOUNT, PASSWORD, "/add"], input="Y\n", text=True, check=True)
         scripts.mkdir()
         subprocess.run(["icacls", str(scripts), "/grant", f"{ACCOUNT}:(OI)(CI)M"], check=True)
         return
