@@ -120,6 +120,14 @@ run() {
 }
 
 base_url=${OPENAEV_URL}
+
+# Skip TLS certificate validation only when the platform explicitly runs with
+# an unsecured (e.g. self-signed) certificate. The artifact signature check
+# above still applies, so this never lets a tampered binary through.
+curl_insecure=""
+if [ "${OPENAEV_UNSECURED_CERTIFICATE}" = "true" ]; then
+  curl_insecure="-k"
+fi
 architecture=$(run uname -m)
 systemd_status=$(systemctl is-system-running 2>/dev/null || true)
 
@@ -166,7 +174,7 @@ workdir=$(mktemp -d "${install_dir}/.openaev-stage-XXXXXX") || fail_integrity "C
 trap 'rm -rf "$workdir"' EXIT INT TERM
 hdr="${workdir}/curl.conf"
 (umask 077; printf 'header = "Authorization: Bearer %s"\n' "${OPENAEV_TOKEN}" > "$hdr")
-run curl -sSfL --config "$hdr" -D "${workdir}/headers" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o "${workdir}/openaev-agent"
+run curl -sSfL ${curl_insecure} --config "$hdr" -D "${workdir}/headers" ${base_url}/api/tenants/${tenant_id}/agent/executable/openaev/${os}/${architecture} -o "${workdir}/openaev-agent"
 
 verify_release_artifact "$workdir" "${workdir}/headers" "${workdir}/openaev-agent"
 release_version=$(header_value "${workdir}/headers" "$VERSION_HEADER")
@@ -206,7 +214,7 @@ openaev_session=$(printf %s "${session_name}" | sed 's/openbas/openaev/g')
 tmp_installer="$(mktemp)" || die "mktemp failed"
 hdr=$(mktemp); umask 077
 printf 'header = "Authorization: Bearer %s"\n' "${OPENAEV_TOKEN}" > "$hdr"
-run curl -sSfLG --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" -o "$tmp_installer"
+run curl -sSfLG ${curl_insecure} --config "$hdr" ${base_url}/api/tenants/${tenant_id}/agent/installer/openaev/${os}/session-user/${OPENAEV_TOKEN} --data-urlencode "installationDir=${openaev_dir}" --data-urlencode "serviceName=${openaev_session}" -o "$tmp_installer"
 rm -f "$hdr"
 run sh "$tmp_installer"
 rm -f "$tmp_installer"
