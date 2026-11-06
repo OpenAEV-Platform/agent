@@ -87,7 +87,8 @@ if sys.platform == "win32":
     SYSTEM_DRIVE = Path(os.environ["SystemDrive"] + "\\")
     if NON_ELEVATED:
         USER = f"{os.environ['COMPUTERNAME']}\\{ACCOUNT}"
-        PASSWORD = "Aa1-" + secrets.token_hex(12)
+        # At most 14 characters: `net user` asks for a confirmation beyond that, which CI cannot answer.
+        PASSWORD = "Aa1-" + secrets.token_hex(4)
         BASE_DIR = SYSTEM_DRIVE / "Users" / ACCOUNT / ".openaev"
         # The account must reach its scripts, which the runner's temporary directory does not allow.
         SCRIPTS_DIR = SYSTEM_DRIVE / "oaev-smoke"
@@ -347,9 +348,7 @@ def user_systemctl(*args):
 def create_account(scripts):
     """The account the agent runs as. On Linux it has a user manager of its own, as when it is logged in."""
     if OS == "windows":
-        # `net user` asks to confirm a password over 14 characters: answer it,
-        # there is no console to do so in CI. The non-elevated variant has an empty password.
-        subprocess.run(["net", "user", ACCOUNT, PASSWORD, "/add"], input="Y\n", text=True, check=True)
+        subprocess.run(["net", "user", ACCOUNT, PASSWORD, "/add"], check=True)
         scripts.mkdir()
         subprocess.run(["icacls", str(scripts), "/grant", f"{ACCOUNT}:(OI)(CI)M"], check=True)
         return

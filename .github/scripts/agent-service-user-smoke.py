@@ -63,7 +63,8 @@ if sys.platform == "win32":
     # The values the documentation gives for this installation.
     SERVICE_NAME = "OAEVAgent-Service"
     USER = f"{os.environ['COMPUTERNAME']}\\{ACCOUNT}"
-    PASSWORD = "Aa1-" + secrets.token_hex(12)
+    # At most 14 characters: `net user` asks for a confirmation beyond that, which CI cannot answer.
+    PASSWORD = "Aa1-" + secrets.token_hex(4)
     # The installer joins this to the profile of the account, which the upgrade
     # script is given in full. It names the agent directory after the service
     # and the sanitized account, and so does the Windows service.
@@ -330,9 +331,7 @@ def create_account(directory):
     if OS == "windows":
         script = directory / "account.ps1"
         script.write_text(WINDOWS_ACCOUNT_SCRIPT)
-        # `net user` asks to confirm a password over 14 characters: answer it,
-        # there is no console to do so in CI.
-        subprocess.run(["net", "user", ACCOUNT, PASSWORD, "/add"], input="Y\n", text=True, check=True)
+        subprocess.run(["net", "user", ACCOUNT, PASSWORD, "/add"], check=True)
         subprocess.run(
             [
                 "powershell", "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
