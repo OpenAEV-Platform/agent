@@ -11,7 +11,8 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use zeroize::Zeroizing;
 
-/// A secret store kept in memory, standing in for a real one.
+/// A secret store kept in memory, standing in for a real one. When empty, it fails like a
+/// store that cannot be read.
 #[derive(Default)]
 pub struct MemoryStore {
     secrets: Mutex<HashMap<String, String>>,
@@ -41,15 +42,6 @@ impl SecretStore for MemoryStore {
             .get(name)
             .map(|value| Zeroizing::new(value.clone()))
             .ok_or_else(|| Error::Internal(format!("no secret named {name}")))
-    }
-}
-
-/// A secret store that cannot be read.
-pub struct FailingStore;
-
-impl SecretStore for FailingStore {
-    fn get(&self, name: &str) -> Result<Zeroizing<String>, Error> {
-        Err(Error::Internal(format!("no secret named {name}")))
     }
 }
 
