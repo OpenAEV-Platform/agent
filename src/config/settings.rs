@@ -12,8 +12,8 @@ const ENV_PRODUCTION_CONFIG_FILE: &str = "openaev-agent-config";
 #[allow(unused)]
 pub struct OpenAEV {
     pub url: String,
-    // Zeroizing from deserialization on, so that every path that drops it wipes it. The
-    // copies the config crate makes while loading the file are not.
+    // Wiped from memory when dropped. Limit: the copies the `config` crate makes while parsing
+    // the file are not wiped.
     pub token: Zeroizing<String>,
     pub unsecured_certificate: bool,
     pub with_proxy: bool,
@@ -22,7 +22,7 @@ pub struct OpenAEV {
     pub tenant_id: String,
 }
 
-// Written by hand so that printing the settings never prints the token.
+// Written by hand so that the token is never printed.
 impl fmt::Debug for OpenAEV {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OpenAEV")
@@ -84,22 +84,20 @@ impl Settings {
         Self::source().load()
     }
 
-    /// Where this run reads its settings from: the config file the installers write next to
-    /// the executable in production, and the `config/` folder otherwise.
+    /// Where to read the settings: the config file next to the executable in production, the
+    /// `config/` folder otherwise.
     pub fn source() -> SettingsSource {
         if Self::mode() != ENV_PRODUCTION {
             return SettingsSource::Development;
         }
-        // Get the current executable path
         let current_exe_path = env::current_exe().unwrap();
         let parent_path = current_exe_path.parent().unwrap();
-        // Join the expected config file with the parent
         SettingsSource::File(parent_path.join(ENV_PRODUCTION_CONFIG_FILE))
     }
 }
 
-/// Where the settings are read from, so that they can be read again later. It holds only the
-/// location, never the settings themselves, so keeping it does not keep the token in memory.
+/// Where the settings are read from. It stores the location only, not the values, so keeping
+/// it does not keep the token in memory.
 #[derive(Clone, Debug)]
 pub enum SettingsSource {
     /// `config/default.toml`, then `config/<env>.toml` if it exists.
@@ -109,8 +107,7 @@ pub enum SettingsSource {
 }
 
 impl SettingsSource {
-    /// Reads the settings again from this source, with the `OPENAEV_*` environment variables
-    /// on top.
+    /// Reads the settings from this source. `OPENAEV_*` environment variables override the file.
     pub fn load(&self) -> Result<Settings, ConfigError> {
         let config = Config::builder().add_source(Environment::with_prefix("openaev"));
         let config = match self {

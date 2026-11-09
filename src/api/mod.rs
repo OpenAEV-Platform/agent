@@ -58,8 +58,7 @@ impl Client {
         }
     }
 
-    /// Reads the token from the store for this request only, so it does not stay in memory
-    /// between requests.
+    /// Reads the token from the store for this request only, so it is not kept in memory.
     fn authorization(&self) -> Result<HeaderValue, Error> {
         let token = self.secret_store.get(TOKEN)?;
         bearer_header(token.as_bytes())
@@ -91,20 +90,19 @@ impl Client {
     }
 }
 
-/// The `Authorization` value for `token`, in a buffer wiped once the request is done with it.
+/// Builds the `Bearer <token>` header value in a `Zeroizing` buffer.
 ///
-/// The header holds this very buffer, not a copy: `HeaderValue` keeps a `Bytes` as it is, and
-/// `Bytes::from_owner` drops (so wipes) the `Zeroizing` buffer when its last reference goes.
-/// The HTTP and TLS layers still copy the bytes they send into their own buffers, which are
-/// not wiped.
+/// `Bytes::from_owner` makes the header own that buffer instead of copying it, so the token is
+/// wiped when the last copy of the header is dropped. Limit: the HTTP and TLS layers copy the
+/// bytes they send, and those copies are not wiped.
 pub(crate) fn bearer_header(token: &[u8]) -> Result<HeaderValue, Error> {
-    // Allocated at its final size: growing it would leave an unwiped copy behind.
+    // Exact capacity: if the Vec had to grow, it would leave an unwiped copy of the token behind.
     let mut bearer = Zeroizing::new(Vec::with_capacity(BEARER_PREFIX.len() + token.len()));
     bearer.extend_from_slice(BEARER_PREFIX);
     bearer.extend_from_slice(token);
     let mut value = HeaderValue::from_maybe_shared(Bytes::from_owner(bearer))
         .map_err(|err| Error::Internal(err.to_string()))?;
-    // Keeps it out of reqwest's debug output.
+    // Hides the value in reqwest's `Debug` output.
     value.set_sensitive(true);
     Ok(value)
 }

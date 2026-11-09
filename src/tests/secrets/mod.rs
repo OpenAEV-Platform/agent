@@ -24,7 +24,7 @@ impl MemoryStore {
         Arc::new(store)
     }
 
-    /// Replaces the token, like a rotation or a store that can be read again.
+    /// Replaces the token, to simulate a rotation or a store that recovers.
     pub fn set_token(&self, token: &str) {
         self.secrets
             .lock()
