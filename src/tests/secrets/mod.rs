@@ -1,4 +1,5 @@
 mod config_store_tests;
+mod import_tests;
 
 use crate::common::error_model::Error;
 use crate::secrets::SecretStore;
@@ -11,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use zeroize::Zeroizing;
 
-/// A secret store kept in memory, standing in for a real one. When empty, it fails like a
+/// A secret store kept in memory, standing in for the OS one. When empty, `get` fails like a
 /// store that cannot be read.
 #[derive(Default)]
 pub struct MemoryStore {
@@ -27,10 +28,7 @@ impl MemoryStore {
 
     /// Replaces the token, to simulate a rotation or a store that recovers.
     pub fn set_token(&self, token: &str) {
-        self.secrets
-            .lock()
-            .unwrap()
-            .insert(crate::secrets::TOKEN.to_string(), token.to_string());
+        self.set(crate::secrets::TOKEN, token).unwrap();
     }
 }
 
@@ -42,6 +40,28 @@ impl SecretStore for MemoryStore {
             .get(name)
             .map(|value| Zeroizing::new(value.clone()))
             .ok_or_else(|| Error::Internal(format!("no secret named {name}")))
+    }
+
+    fn set(&self, name: &str, value: &str) -> Result<(), Error> {
+        self.secrets
+            .lock()
+            .unwrap()
+            .insert(name.to_string(), value.to_string());
+        Ok(())
+    }
+}
+
+/// A secret store that cannot be read or written, like an OS store that is unavailable.
+/// `MemoryStore` cannot stand in here: its `set` always works.
+pub struct FailingStore;
+
+impl SecretStore for FailingStore {
+    fn get(&self, _name: &str) -> Result<Zeroizing<String>, Error> {
+        Err(Error::Internal("store unavailable".to_string()))
+    }
+
+    fn set(&self, _name: &str, _value: &str) -> Result<(), Error> {
+        Err(Error::Internal("store unavailable".to_string()))
     }
 }
 
