@@ -6,10 +6,8 @@ use log::error;
 use std::io;
 use zeroize::Zeroizing;
 
-/// The token in the config, where the installers write it. Read again on each use, never
-/// kept in memory.
+/// Reads the token from the agent config file on each call. Nothing is cached.
 pub struct ConfigStore {
-    /// Where the settings are read from. It holds no setting, so no token either.
     source: SettingsSource,
 }
 
@@ -36,9 +34,9 @@ impl SecretStore for ConfigStore {
     }
 }
 
-/// Explains why the config could not be read, without using the text of `err`. That text can
-/// hold the token: a parse error quotes the line that failed, and a type error quotes the value
-/// it found. So the explanation is built only from the kind of error and the setting's name.
+/// Says why the config could not be read, using only the error kind and the setting name.
+/// The error's own text is not used: it can contain the token (a parse error quotes the failing
+/// line, a type error quotes the value).
 pub(crate) fn reason(err: &ConfigError) -> String {
     match err {
         ConfigError::Foreign(cause) => match cause.downcast_ref::<io::Error>().map(io::Error::kind)

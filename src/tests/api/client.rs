@@ -195,7 +195,7 @@ mod tests {
         assert!(value.is_sensitive());
     }
 
-    /// Stands in for the `Zeroizing` buffer: records when it is dropped, so wiped.
+    /// Fake `Zeroizing` buffer: records when it is dropped (when the real one would be wiped).
     struct DropFlag(Vec<u8>, Arc<AtomicBool>);
 
     impl AsRef<[u8]> for DropFlag {
