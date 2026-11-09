@@ -5,7 +5,7 @@ mod tests {
     use crate::api::{bearer_header, Client, AUTHORIZATION_HEADER};
     use crate::tests::api::client::TOKEN;
     use crate::tests::api::tls_server::serve_self_signed_https;
-    use crate::tests::secrets::{FailingStore, MemoryStore};
+    use crate::tests::secrets::MemoryStore;
     use bytes::Bytes;
     use mockito;
     use reqwest::header::HeaderValue;
@@ -56,7 +56,7 @@ mod tests {
         // -- PREPARE --
         let client = Client::new(
             "http://localhost".to_string(),
-            Arc::new(FailingStore),
+            Arc::new(MemoryStore::default()),
             false,
             false,
         );
