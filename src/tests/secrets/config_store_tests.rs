@@ -118,7 +118,7 @@ mod tests {
         };
         let no_token = no_token.to_string();
         assert!(
-            no_token.contains("no token in the agent config"),
+            no_token.contains("No token in the config file"),
             "{no_token}"
         );
         assert_eq!(repaired.unwrap().as_str(), "first-token");

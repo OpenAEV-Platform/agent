@@ -30,7 +30,7 @@ token = \"not-the-agent-token\"
         let store = MemoryStore::default();
 
         // -- EXECUTE --
-        import(&store, Some("config-token"), &config).unwrap();
+        import(&store, "config-token", &config).unwrap();
 
         // -- ASSERT --
         assert_eq!(store.get(TOKEN).unwrap().as_str(), "config-token");
@@ -50,26 +50,10 @@ token = \"not-the-agent-token\"
         let store = MemoryStore::with_token("old-token");
 
         // -- EXECUTE --
-        import(store.as_ref(), Some("config-token"), &config).unwrap();
+        import(store.as_ref(), "config-token", &config).unwrap();
 
         // -- ASSERT --
         assert_eq!(store.get(TOKEN).unwrap().as_str(), "config-token");
-    }
-
-    #[test]
-    fn test_import_does_nothing_without_a_config_token() {
-        // -- PREPARE --
-        let dir = test_dir("import-nothing");
-        let config = dir.join("config.toml");
-        fs::write(&config, CONFIG).unwrap();
-        let store = MemoryStore::with_token("stored-token");
-
-        // -- EXECUTE --
-        import(store.as_ref(), None, &config).unwrap();
-
-        // -- ASSERT --
-        assert_eq!(store.get(TOKEN).unwrap().as_str(), "stored-token");
-        assert_eq!(fs::read_to_string(&config).unwrap(), CONFIG);
     }
 
     #[test]
@@ -80,7 +64,7 @@ token = \"not-the-agent-token\"
         fs::write(&config, CONFIG).unwrap();
 
         // -- EXECUTE --
-        let result = import(&FailingStore, Some("config-token"), &config);
+        let result = import(&FailingStore, "config-token", &config);
 
         // -- ASSERT --
         let err = result.unwrap_err().to_string();
@@ -99,7 +83,7 @@ token = \"not-the-agent-token\"
         let store = MemoryStore::default();
 
         // -- EXECUTE --
-        let result = import(&store, Some("config-token"), &config);
+        let result = import(&store, "config-token", &config);
 
         // -- ASSERT --
         let err = result.unwrap_err().to_string();
@@ -121,7 +105,7 @@ token = \"not-the-agent-token\"
         let store = MemoryStore::default();
 
         // -- EXECUTE --
-        import(&store, Some("config-token"), &config).unwrap();
+        import(&store, "config-token", &config).unwrap();
 
         // -- ASSERT --
         let settings = SettingsSource::File(dir.join("agent-config"))

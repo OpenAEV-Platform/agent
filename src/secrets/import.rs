@@ -9,33 +9,24 @@ use zeroize::Zeroizing;
 /// Table of the config file that holds the token.
 const CONFIG_TABLE: &str = "openaev";
 
-/// Moves the token from the config file into `store`, then removes it from the config file.
+/// Moves `token` from the config file into `store`, then removes it from the config file.
 ///
-/// The installers write the token in the config file, for example at installation or
-/// reinstallation, so the move runs at each start. When the config file holds no token, there
-/// is nothing to do. The token is stored before it is removed: if the store fails, the config
-/// file is left unchanged. On failure, the error states what to do; the agent does not attempt
-/// any repair.
-pub fn import(
-    store: &dyn SecretStore,
-    config_token: Option<&str>,
-    config: &Path,
-) -> Result<(), Error> {
-    let Some(token) = config_token else {
-        return Ok(());
-    };
+/// The token is stored before it is removed: if the store fails, the config file is left
+/// unchanged. On failure, the error states what to do; the agent does not attempt any repair.
+pub fn import(store: &dyn SecretStore, token: &str, config: &Path) -> Result<(), Error> {
     store.set(TOKEN, token).map_err(|err| {
         Error::Internal(format!(
-            "Could not save the token in the OS secret store: {err}. Reinstall the agent"
+            "Unable to save the token in the OS secret store: {err}. Reinstall the agent"
         ))
     })?;
-    info!("Token moved to the OS secret store");
     remove_token_from_config(config).map_err(|err| {
         Error::Internal(format!(
             "The token is still in clear text in {}: {err}. Remove the token line, or reinstall the agent",
             config.display()
         ))
-    })
+    })?;
+    info!("Token moved to the OS secret store");
+    Ok(())
 }
 
 /// Removes the token from the `[openaev]` table of the config file.
@@ -48,7 +39,7 @@ fn remove_token_from_config(config: &Path) -> Result<(), Error> {
     // The parse error is not returned: it quotes the failing line, which can contain the token.
     let mut document: DocumentMut = content
         .parse()
-        .map_err(|_| Error::Internal("the config is not valid TOML".to_string()))?;
+        .map_err(|_| Error::Internal("the config file is not valid TOML".to_string()))?;
     let removed = document
         .get_mut(CONFIG_TABLE)
         .and_then(Item::as_table_like_mut)

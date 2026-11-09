@@ -12,9 +12,6 @@ const ENV_PRODUCTION_CONFIG_FILE: &str = "openaev-agent-config";
 #[allow(unused)]
 pub struct OpenAEV {
     pub url: String,
-    // `None` once the token has been moved to the OS secret store. The value is wiped from
-    // memory when dropped. Limitation: the copies made by the `config` crate while parsing the
-    // file are not wiped.
     pub token: Option<Zeroizing<String>>,
     pub unsecured_certificate: bool,
     pub with_proxy: bool,
@@ -28,7 +25,7 @@ impl fmt::Debug for OpenAEV {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("OpenAEV")
             .field("url", &self.url)
-            .field("token", &self.token.as_ref().map(|_| "<redacted>"))
+            .field("token", &"<redacted>")
             .field("unsecured_certificate", &self.unsecured_certificate)
             .field("with_proxy", &self.with_proxy)
             .field("installation_mode", &self.installation_mode)

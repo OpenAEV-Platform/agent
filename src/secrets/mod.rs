@@ -40,15 +40,15 @@ pub fn open(config_token: Option<Zeroizing<String>>) -> Result<Arc<dyn SecretSto
     // The OS secret store is used only in production, where the installers write the config
     // file.
     if let (Some(store), SettingsSource::File(config)) = (platform_store(), &source) {
-        // `SettingsSource` holds the file name without its extension. The installers write a
-        // `.toml` file.
-        let config = config.with_extension("toml");
-        import(
-            store.as_ref(),
-            config_token.as_deref().map(String::as_str),
-            &config,
-        )
-        .inspect_err(|err| error!("{err}"))?;
+        // The installers write the token in the config file at installation and
+        // reinstallation. Only the first start after that finds it; the following starts skip
+        // the move.
+        if let Some(token) = config_token.as_deref() {
+            // `SettingsSource` holds the file name without its extension. The installers write
+            // a `.toml` file.
+            let config = config.with_extension("toml");
+            import(store.as_ref(), token, &config).inspect_err(|err| error!("{err}"))?;
+        }
         // Reading the token back confirms that the store can return it. Otherwise, the agent
         // stops now instead of failing on each request.
         store.get(TOKEN).inspect_err(|err| error!("{err}"))?;

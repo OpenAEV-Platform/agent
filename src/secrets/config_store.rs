@@ -26,7 +26,7 @@ impl SecretStore for ConfigStore {
         }
         let settings = self.source.load().map_err(|err| {
             let message = format!(
-                "Unable to read token from agent configuration: {}",
+                "Unable to read the token from the config file: {}",
                 reason(&err)
             );
             error!("{message}");
@@ -36,13 +36,14 @@ impl SecretStore for ConfigStore {
         settings
             .openaev
             .token
-            .ok_or_else(|| Error::Internal("no token in the agent config".to_string()))
+            .ok_or_else(|| Error::Internal("No token in the config file".to_string()))
+            .inspect_err(|err| error!("{err}"))
     }
 
     // The agent never writes the token to the config file: it would be in clear text again.
     fn set(&self, _name: &str, _value: &str) -> Result<(), Error> {
         Err(Error::Internal(
-            "the agent does not write secrets to its config".to_string(),
+            "The agent does not write secrets to the config file".to_string(),
         ))
     }
 }
