@@ -538,10 +538,13 @@ section "install"
 
   ; 7. Create the config with a restricted ACL.
   ;    The config holds the token. Without an explicit ACL it inherits the folder's,
-  ;    which lets every local user read it. Only SYSTEM, Administrators and read access
-  ;    for the service account. Well-known SIDs, not names: account names are localized.
+  ;    which lets every local user read it. Access is limited to SYSTEM, Administrators
+  ;    and the service account. The service account needs read and write access: at
+  ;    start, the agent moves the token to the OS secret store and removes it from
+  ;    this file.
+  ;    Well-known SIDs, not names: account names are localized.
   Push "$INSTDIR\openaev-agent-config.toml"
-  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;$UserSID)"
+  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FRFW;;;$UserSID)"
   Call CreateProtectedFile
   Pop $4
   ${If} $4 == -1

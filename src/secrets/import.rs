@@ -6,14 +6,16 @@ use std::path::Path;
 use toml_edit::{DocumentMut, Item};
 use zeroize::Zeroizing;
 
-/// The table of the config file where the token is written.
+/// Table of the config file that holds the token.
 const CONFIG_TABLE: &str = "openaev";
 
-/// Moves the token from the config file into `store`, then removes it from the config.
+/// Moves the token from the config file into `store`, then removes it from the config file.
 ///
-/// The installers write the token in the config at each install and upgrade, so this runs at
-/// each start. When the config has no token, there is nothing to move. When something fails,
-/// the error says what to do: the agent does not try to repair it.
+/// The installers write the token in the config file, for example at installation or
+/// reinstallation, so the move runs at each start. When the config file holds no token, there
+/// is nothing to do. The token is stored before it is removed: if the store fails, the config
+/// file is left unchanged. On failure, the error states what to do; the agent does not attempt
+/// any repair.
 pub fn import(
     store: &dyn SecretStore,
     config_token: Option<&str>,
@@ -38,12 +40,12 @@ pub fn import(
 
 /// Removes the token from the `[openaev]` table of the config file.
 ///
-/// Everything else stays as it is: other settings, comments and formatting. The file is
-/// rewritten in place, so it keeps its permissions.
+/// The rest of the file is kept unchanged, including other settings, comments and formatting.
+/// The file is rewritten in place, so it keeps its access permissions.
 fn remove_token_from_config(config: &Path) -> Result<(), Error> {
+    // The file content holds the token, so it is wiped from memory when dropped.
     let content = Zeroizing::new(fs::read_to_string(config)?);
-    // We hide the parse error on purpose: it quotes the line that failed, and that line can be
-    // the token.
+    // The parse error is not returned: it quotes the failing line, which can contain the token.
     let mut document: DocumentMut = content
         .parse()
         .map_err(|_| Error::Internal("the config is not valid TOML".to_string()))?;

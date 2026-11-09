@@ -1,9 +1,10 @@
-//! Secrets the agent authenticates with (today, only the platform token).
+//! Storage of the secrets the agent authenticates with. Today, the only secret is the
+//! platform token.
 //!
-//! The installers write the token in clear text in the config file. In production, on a
-//! platform with an OS secret store, the agent moves the token into that store at each start
-//! and reads it from there. Otherwise, `ConfigStore` reads it from the config file.
-//! Either way, the token is read on each use instead of being kept in memory.
+//! The installers write the token in clear text in the config file. In production, when the
+//! platform provides an OS secret store, the agent moves the token into that store at each
+//! start and reads it from there. Otherwise, `ConfigStore` reads it from the config file.
+//! In both cases, the token is read on each use and is not kept in memory.
 
 pub(crate) mod config_store;
 mod import;
@@ -17,38 +18,46 @@ use log::error;
 use std::sync::Arc;
 use zeroize::Zeroizing;
 
-/// Name of the platform token secret.
+/// Name of the platform token in the secret stores.
 pub const TOKEN: &str = "token";
 
+/// A place where the agent reads its secrets, and writes them when the store supports it.
 pub trait SecretStore: Send + Sync {
-    /// Reads the secret. The returned value is wiped from memory when dropped.
+    /// Returns the secret. The value is wiped from memory when it is dropped.
     fn get(&self, name: &str) -> Result<Zeroizing<String>, Error>;
-    /// Replaces the secret. The next `get` returns the new value.
+    /// Stores the secret and replaces any previous value. The next `get` returns it.
     fn set(&self, name: &str, value: &str) -> Result<(), Error>;
 }
 
-/// Opens the store the agent reads its token from.
+/// Returns the secret store the agent reads its token from.
 ///
-/// `config_token` is the token the installers wrote in the config file, if it is still there.
-pub fn open(config_token: Option<Zeroizing<String>>) -> Arc<dyn SecretStore> {
+/// `config_token` is the token found in the config file, if any. In production, when an OS
+/// secret store is available, the token is moved into it and then read back once. Any failure
+/// stops the agent: the agent cannot authenticate without the token, and the token must not
+/// remain in clear text in the config file.
+pub fn open(config_token: Option<Zeroizing<String>>) -> Result<Arc<dyn SecretStore>, Error> {
     let source = Settings::source();
-    // The OS store is only used in production, where the installers write the config file.
+    // The OS secret store is used only in production, where the installers write the config
+    // file.
     if let (Some(store), SettingsSource::File(config)) = (platform_store(), &source) {
-        // `SettingsSource` names the file without its extension; the installers write `.toml`.
+        // `SettingsSource` holds the file name without its extension. The installers write a
+        // `.toml` file.
         let config = config.with_extension("toml");
-        if let Err(err) = import(
+        import(
             store.as_ref(),
             config_token.as_deref().map(String::as_str),
             &config,
-        ) {
-            error!("{err}");
-        }
-        return store;
+        )
+        .inspect_err(|err| error!("{err}"))?;
+        // Reading the token back confirms that the store can return it. Otherwise, the agent
+        // stops now instead of failing on each request.
+        store.get(TOKEN).inspect_err(|err| error!("{err}"))?;
+        return Ok(store);
     }
-    Arc::new(ConfigStore::new(source))
+    Ok(Arc::new(ConfigStore::new(source)))
 }
 
-/// The OS secret store of this platform, if the agent supports one here.
+/// Returns the OS secret store of this platform, or `None` when the agent does not support one.
 fn platform_store() -> Option<Arc<dyn SecretStore>> {
     None
 }

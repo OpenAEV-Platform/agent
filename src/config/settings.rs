@@ -12,8 +12,9 @@ const ENV_PRODUCTION_CONFIG_FILE: &str = "openaev-agent-config";
 #[allow(unused)]
 pub struct OpenAEV {
     pub url: String,
-    // None once the token has moved to the OS secret store. Wiped from memory when dropped.
-    // Limit: the copies the `config` crate makes while parsing the file are not wiped.
+    // `None` once the token has been moved to the OS secret store. The value is wiped from
+    // memory when dropped. Limitation: the copies made by the `config` crate while parsing the
+    // file are not wiped.
     pub token: Option<Zeroizing<String>>,
     pub unsecured_certificate: bool,
     pub with_proxy: bool,
