@@ -7,9 +7,13 @@
 //! In both cases, the token is read on each use and is not kept in memory.
 
 pub(crate) mod config_store;
+#[cfg(windows)]
+mod dpapi;
 mod import;
 
 pub use config_store::ConfigStore;
+#[cfg(windows)]
+pub use dpapi::DpapiStore;
 pub use import::import;
 
 use crate::common::error_model::Error;
@@ -58,6 +62,17 @@ pub fn open(config_token: Option<Zeroizing<String>>) -> Result<Arc<dyn SecretSto
 }
 
 /// Returns the OS secret store of this platform, or `None` when the agent does not support one.
+#[cfg(windows)]
+fn platform_store() -> Option<Arc<dyn SecretStore>> {
+    // The encrypted token is kept next to the executable, like the config file.
+    let exe = std::env::current_exe().unwrap();
+    Some(Arc::new(DpapiStore::new(
+        exe.parent().unwrap().to_path_buf(),
+    )))
+}
+
+/// Returns the OS secret store of this platform, or `None` when the agent does not support one.
+#[cfg(not(windows))]
 fn platform_store() -> Option<Arc<dyn SecretStore>> {
     None
 }
