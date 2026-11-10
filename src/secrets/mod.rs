@@ -48,8 +48,6 @@ pub fn open(config_token: Option<Zeroizing<String>>) -> Result<Arc<dyn SecretSto
         // reinstallation. Only the first start after that finds it; the following starts skip
         // the move.
         if let Some(token) = config_token.as_deref() {
-            // `SettingsSource` holds the file name without its extension. The installers write
-            // a `.toml` file.
             let config = config.with_extension("toml");
             import(store.as_ref(), token, &config).inspect_err(|err| error!("{err}"))?;
         }
