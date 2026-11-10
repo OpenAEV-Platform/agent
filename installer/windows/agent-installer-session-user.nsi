@@ -572,6 +572,13 @@ section "install"
   ${If} ${Errors}
     Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
+  ; The encrypted token file too: it belongs to the account that created it, which can
+  ; differ after a reinstall. The agent creates it again from the new config at start.
+  ClearErrors
+  Delete "$INSTDIR\openaev-agent-token.dpapi"
+  ${If} ${Errors}
+    Abort "Unable to delete the previous $INSTDIR\openaev-agent-token.dpapi"
+  ${EndIf}
 
   ; 4. Create the config with a restricted ACL.
   ;    The config holds the token. Without an explicit ACL it inherits the folder's,

@@ -57,7 +57,12 @@ impl SecretStore for DpapiStore {
                 Error::Internal(message)
             })?;
         let value = std::str::from_utf8(&plain).map_err(|_| {
-            Error::Internal(format!("the {name} in {} is not text", path.display()))
+            let message = format!(
+                "The {name} in {} is not text. Reinstall the agent",
+                path.display()
+            );
+            error!("{message}");
+            Error::Internal(message)
         })?;
         Ok(Zeroizing::new(value.to_string()))
     }

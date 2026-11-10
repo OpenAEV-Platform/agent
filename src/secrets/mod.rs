@@ -55,7 +55,7 @@ pub fn open(config_token: Option<Zeroizing<String>>) -> Result<Arc<dyn SecretSto
         }
         // Reading the token back confirms that the store can return it. Otherwise, the agent
         // stops now instead of failing on each request.
-        store.get(TOKEN).inspect_err(|err| error!("{err}"))?;
+        store.get(TOKEN)?;
         return Ok(store);
     }
     Ok(Arc::new(ConfigStore::new(source)))
