@@ -7,7 +7,7 @@ permissions:
   contents: read
 jobs:
   validate-pr-title:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: "Generate a token"
         id: generate-token
