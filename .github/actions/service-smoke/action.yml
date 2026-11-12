@@ -29,4 +29,6 @@ runs:
     # Bash puts Git's openssl on PATH on Windows too; the mock signs with it.
     - name: Install, upgrade to this build, launch an implant and uninstall
       shell: bash
-      run: python .github/scripts/agent-service-smoke.py smoke/${{ inputs.jfrog_path }}
+      env:
+        JFROG_PATH: ${{ inputs.jfrog_path }}
+      run: python .github/scripts/agent-service-smoke.py "smoke/$JFROG_PATH"
