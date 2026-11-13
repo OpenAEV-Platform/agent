@@ -1,7 +1,10 @@
 name: Service smoke
-description: "Install the last release as a service, upgrade it to this build, launch an implant and uninstall, against a mock platform"
+description: "Install the last release in an installation mode, upgrade it to this build, launch an implant and uninstall, against a mock platform"
 
 inputs:
+  mode:
+    description: "Installation mode: service, service-user, session-user, or session-user-non-elevated (Windows session-user as a standard user)"
+    required: true
   os:
     description: "Runner OS family: ubuntu, windows or macos"
     required: true
@@ -31,4 +34,11 @@ runs:
       shell: bash
       env:
         JFROG_PATH: ${{ inputs.jfrog_path }}
-      run: python .github/scripts/agent-service-smoke.py "smoke/$JFROG_PATH"
+        MODE: ${{ inputs.mode }}
+      run: |
+        set -euo pipefail
+        # The non-elevated variant is the session-user script with an argument.
+        script="agent-${MODE%-non-elevated}-smoke.py"
+        variant=""
+        if [[ $MODE == *-non-elevated ]]; then variant="non-elevated"; fi
+        python .github/scripts/agent-service-smoke.py "smoke/$JFROG_PATH"
