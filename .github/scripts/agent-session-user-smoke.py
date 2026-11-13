@@ -474,6 +474,23 @@ def agent_pid():
     return int(match.group()) if match else 0
 
 
+def agent_processes():
+    """Every agent process of the machine as (pid, executable path), wherever it runs from. Windows only."""
+    query = (
+        "Get-CimInstance Win32_Process -Filter \"Name = 'openaev-agent.exe'\""
+        " | ForEach-Object { \"$($_.ProcessId)|$($_.ExecutablePath)\" }"
+    )
+    output = subprocess.run(
+        ["powershell", "-NoProfile", "-NonInteractive", "-Command", query], capture_output=True, text=True
+    ).stdout
+    processes = []
+    for line in output.splitlines():
+        pid, _, path = line.partition("|")
+        if pid.strip().isdigit():
+            processes.append((int(pid), path.strip()))
+    return processes
+
+
 def read_file(path):
     """A file written by the agent, which may run as another account; None when missing."""
     if OS == "windows":
@@ -598,7 +615,9 @@ def main():
         if reported != old_version:
             raise AssertionError(f"The installed agent reports {reported}, expected {old_version}")
         old_pid = agent_pid()
-        print(f"Release {old_version} installed and registered (pid {old_pid})")
+        # Every process of the release, found by name: agent_pid() only finds the one running from AGENT_DIR.
+        old_pids = {pid for pid, _ in agent_processes()} if OS == "windows" else set()
+        print(f"Release {old_version} installed and registered (pid {old_pid}, processes {sorted(old_pids)})")
 
         # 2. Hand it an upgrade job, as the platform does on registration. The
         # script runs inside the agent's session and restarts the agent itself.
@@ -617,6 +636,17 @@ def main():
             300,
             "The agent was not restarted on this build",
         )
+        if OS == "windows":
+            # The upgrade replaces the agent: the release must be gone and only the new one may run, or
+            # both would poll the platform and either could take the inject job.
+            wait_for(
+                lambda: not old_pids & {pid for pid, _ in agent_processes()},
+                60,
+                f"The agent of the release (processes {sorted(old_pids)}) still runs after the upgrade",
+            )
+            running = agent_processes()
+            if len(running) != 1:
+                raise AssertionError(f"{len(running)} agents run after the upgrade, expected 1: {running}")
         wait_for(
             lambda: any(at > upgraded_at and v == new_version for at, v in State.registrations),
             120,
