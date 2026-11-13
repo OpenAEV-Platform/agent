@@ -524,20 +524,32 @@ def diagnostics():
         subprocess.run(["schtasks", "/Query", "/TN", TASK, "/V", "/FO", "LIST"])
     print(f"--- pid: {agent_pid()}")
     print(f"--- registrations: {State.registrations}")
-    print(f"--- implant downloads: {State.implant_downloads}, callbacks: {json.dumps(State.callbacks)}")
-    # What the agent really created: tells a log in another place from one that was never written.
-    print(f"--- {AGENT_DIR / 'runtimes'}")
-    runtimes = AGENT_DIR / "runtimes"
+    print(f"--- implant downloads: {State.implant_downloads}, callbacks: {json.dumps(State.callbacks)}", flush=True)
+    # Every agent and implant process, and every execution folder, wherever they are: the one that
+    # took the inject job may not be the one whose directory is checked.
+    print("--- agent and implant processes", flush=True)
     if OS == "windows":
         subprocess.run(
             [
                 "powershell", "-NoProfile", "-NonInteractive", "-Command",
-                f"Get-ChildItem -Recurse -Force '{runtimes}' | Select-Object FullName, Length, LastWriteTime"
-                " | Format-Table -AutoSize | Out-String -Width 300",
+                "Get-CimInstance Win32_Process -Filter \"Name like 'openaev-%'\""
+                " | Select-Object ProcessId, ParentProcessId, CreationDate, ExecutablePath"
+                " | Format-List | Out-String -Width 300",
+            ]
+        )
+        print("--- execution folders", flush=True)
+        subprocess.run(
+            [
+                "powershell", "-NoProfile", "-NonInteractive", "-Command",
+                f"Get-ChildItem -Path '{SYSTEM_DRIVE / 'Users' / '*' / '.openaev' / '*' / 'runtimes' / '*'}'"
+                " -Directory -Force -ErrorAction SilentlyContinue"
+                " | Select-Object FullName, CreationTime | Format-Table -AutoSize | Out-String -Width 300",
             ]
         )
     else:
-        subprocess.run(["sudo", "ls", "-laR", str(runtimes)])
+        subprocess.run("ps -eo pid,ppid,lstart,args | grep '[o]penaev-'", shell=True)
+        print("--- execution folders", flush=True)
+        subprocess.run(["sudo", "find", "/home", "-type", "d", "-path", "*/runtimes/execution-*", "-prune"])
     for log in (AGENT_LOG, AGENT_DIR / "runner.log", LAUNCHER_LOG, IMPLANT_LOG):
         print(f"--- {log}")
         content = read_file(log)
