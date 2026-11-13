@@ -535,13 +535,23 @@ section "install"
   ${If} ${Errors}
     Abort "Unable to delete the previous $INSTDIR\openaev-agent-config.toml"
   ${EndIf}
+  ; The encrypted token file too: it belongs to the account that created it, which can
+  ; differ after a reinstall. The agent creates it again from the new config at start.
+  ClearErrors
+  Delete "$INSTDIR\openaev-agent-token.dpapi"
+  ${If} ${Errors}
+    Abort "Unable to delete the previous $INSTDIR\openaev-agent-token.dpapi"
+  ${EndIf}
 
   ; 7. Create the config with a restricted ACL.
   ;    The config holds the token. Without an explicit ACL it inherits the folder's,
-  ;    which lets every local user read it. Only SYSTEM, Administrators and read access
-  ;    for the service account. Well-known SIDs, not names: account names are localized.
+  ;    which lets every local user read it. Access is limited to SYSTEM, Administrators
+  ;    and the service account. The service account needs read and write access: at
+  ;    start, the agent moves the token to the OS secret store and removes it from
+  ;    this file.
+  ;    Well-known SIDs, not names: account names are localized.
   Push "$INSTDIR\openaev-agent-config.toml"
-  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FR;;;$UserSID)"
+  Push "D:P(A;;FA;;;SY)(A;;FA;;;BA)(A;;FRFW;;;$UserSID)"
   Call CreateProtectedFile
   Pop $4
   ${If} $4 == -1
