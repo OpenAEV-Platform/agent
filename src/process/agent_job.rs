@@ -1,24 +1,26 @@
 use crate::api::Client;
 use crate::config::execution_details::ExecutionDetails;
 use crate::process::agent_exec;
+use crate::secrets::SecretStore;
 use crate::THREADS_CONTROL;
 use log::{error, info};
 use std::io::Error;
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::thread;
 use std::thread::{sleep, JoinHandle};
 use std::time::Duration;
 
 pub fn listen(
     uri: String,
-    token: String,
+    secret_store: Arc<dyn SecretStore>,
     unsecured_certificate: bool,
     with_proxy: bool,
     execution_details: ExecutionDetails,
     tenant_id: String,
 ) -> Result<JoinHandle<()>, Error> {
     info!("Starting listening jobs thread");
-    let api = Client::new(uri, token, unsecured_certificate, with_proxy);
+    let api = Client::new(uri, secret_store, unsecured_certificate, with_proxy);
     let handle = thread::spawn(move || {
         // While no stop signal received
         while THREADS_CONTROL.load(Ordering::Relaxed) {

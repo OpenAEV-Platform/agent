@@ -1,20 +1,40 @@
 use config::{Config, ConfigError, Environment, File};
 use serde::Deserialize;
 use std::env;
+use std::fmt;
+use std::path::PathBuf;
+use zeroize::Zeroizing;
 
 const ENV_PRODUCTION: &str = "production";
 const ENV_PRODUCTION_CONFIG_FILE: &str = "openaev-agent-config";
 
-#[derive(Debug, Deserialize, Clone)]
+#[derive(Deserialize, Clone)]
 #[allow(unused)]
 pub struct OpenAEV {
     pub url: String,
-    pub token: String,
+    // Wiped from memory when dropped. Limit: the copies the `config` crate makes while parsing
+    // the file are not wiped.
+    pub token: Zeroizing<String>,
     pub unsecured_certificate: bool,
     pub with_proxy: bool,
     pub installation_mode: String,
     pub service_name: String,
     pub tenant_id: String,
+}
+
+// Written by hand so that the token is never printed.
+impl fmt::Debug for OpenAEV {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("OpenAEV")
+            .field("url", &self.url)
+            .field("token", &"<redacted>")
+            .field("unsecured_certificate", &self.unsecured_certificate)
+            .field("with_proxy", &self.with_proxy)
+            .field("installation_mode", &self.installation_mode)
+            .field("service_name", &self.service_name)
+            .field("tenant_id", &self.tenant_id)
+            .finish()
+    }
 }
 
 fn default_executing_max_time_minutes() -> u64 {
@@ -61,25 +81,44 @@ impl Settings {
     }
 
     pub fn new() -> Result<Self, ConfigError> {
-        let run_mode = Self::mode();
-        let config = Config::builder().add_source(Environment::with_prefix("openaev"));
-        if run_mode == ENV_PRODUCTION {
-            // Get the current executable path
-            let current_exe_patch = env::current_exe().unwrap();
-            let parent_path = current_exe_patch.parent().unwrap();
-            // Join the expected config file with the parent
-            let config_file = parent_path.join(ENV_PRODUCTION_CONFIG_FILE);
-            let config_path = config_file.display();
-            config
-                .add_source(File::with_name(&config_path.to_string()).required(true))
-                .build()?
-                .try_deserialize()
-        } else {
-            config
-                .add_source(File::with_name("config/default"))
-                .add_source(File::with_name(&format!("config/{run_mode}")).required(false))
-                .build()?
-                .try_deserialize()
+        Self::source().load()
+    }
+
+    /// Where to read the settings: the config file next to the executable in production, the
+    /// `config/` folder otherwise.
+    pub fn source() -> SettingsSource {
+        if Self::mode() != ENV_PRODUCTION {
+            return SettingsSource::Development;
         }
+        let current_exe_path = env::current_exe().unwrap();
+        let parent_path = current_exe_path.parent().unwrap();
+        SettingsSource::File(parent_path.join(ENV_PRODUCTION_CONFIG_FILE))
+    }
+}
+
+/// Where the settings are read from. It stores the location only, not the values, so keeping
+/// it does not keep the token in memory.
+#[derive(Clone, Debug)]
+pub enum SettingsSource {
+    /// `config/default.toml`, then `config/<env>.toml` if it exists.
+    Development,
+    /// The config file the installers write, given without its extension.
+    File(PathBuf),
+}
+
+impl SettingsSource {
+    /// Reads the settings from this source. `OPENAEV_*` environment variables override the file.
+    pub fn load(&self) -> Result<Settings, ConfigError> {
+        let config = Config::builder().add_source(Environment::with_prefix("openaev"));
+        let config = match self {
+            SettingsSource::Development => config
+                .add_source(File::with_name("config/default"))
+                .add_source(
+                    File::with_name(&format!("config/{}", Settings::mode())).required(false),
+                ),
+            SettingsSource::File(config_file) => config
+                .add_source(File::with_name(&config_file.display().to_string()).required(true)),
+        };
+        config.build()?.try_deserialize()
     }
 }
