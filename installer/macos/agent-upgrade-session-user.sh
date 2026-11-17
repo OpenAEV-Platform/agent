@@ -117,7 +117,7 @@ base_url=${OPENAEV_URL}
 
 # Skip TLS certificate validation only when the platform explicitly runs with
 # an unsecured (e.g. self-signed) certificate. The artifact signature check
-# above still applies, so this never lets a tampered binary through.
+# run after the download below still applies, so this never lets a tampered binary through.
 curl_insecure=""
 if [ "${OPENAEV_UNSECURED_CERTIFICATE}" = "true" ]; then
   curl_insecure="-k"

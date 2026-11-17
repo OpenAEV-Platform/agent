@@ -44,7 +44,13 @@ function Invoke-PlatformWebRequest
     $previousCallback = [System.Net.ServicePointManager]::ServerCertificateValidationCallback
     if ("${OPENAEV_UNSECURED_CERTIFICATE}" -eq "true")
     {
-        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = { $true }
+        # A compiled callback, not a script block: Windows PowerShell 5.1 runs the
+        # callback on a thread with no runspace, where a script block cannot run.
+        if (-not ('OpenAEVTrustAllCertificates' -as [type]))
+        {
+            Add-Type -TypeDefinition 'public static class OpenAEVTrustAllCertificates { public static bool Accept(object sender, System.Security.Cryptography.X509Certificates.X509Certificate certificate, System.Security.Cryptography.X509Certificates.X509Chain chain, System.Net.Security.SslPolicyErrors errors) { return true; } public static System.Net.Security.RemoteCertificateValidationCallback Callback() { return new System.Net.Security.RemoteCertificateValidationCallback(Accept); } }'
+        }
+        [System.Net.ServicePointManager]::ServerCertificateValidationCallback = [OpenAEVTrustAllCertificates]::Callback()
     }
     try
     {
