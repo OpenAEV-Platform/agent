@@ -6,7 +6,9 @@ use log::error;
 use std::io;
 use zeroize::Zeroizing;
 
-/// Reads the token from the agent config file on each call. Nothing is cached.
+/// Secret store backed by the agent config file. The token is read from the file on each call
+/// and is never cached. This store is used in development and on platforms without an OS
+/// secret store.
 pub struct ConfigStore {
     source: SettingsSource,
 }
@@ -24,13 +26,25 @@ impl SecretStore for ConfigStore {
         }
         let settings = self.source.load().map_err(|err| {
             let message = format!(
-                "Unable to read token from agent configuration: {}",
+                "Unable to read the token from the config file: {}",
                 reason(&err)
             );
             error!("{message}");
             Error::Internal(message)
         })?;
-        Ok(settings.openaev.token)
+        // Without an OS secret store, the config file must hold the token.
+        settings
+            .openaev
+            .token
+            .ok_or_else(|| Error::Internal("No token in the config file".to_string()))
+            .inspect_err(|err| error!("{err}"))
+    }
+
+    // The agent never writes the token to the config file: it would be in clear text again.
+    fn set(&self, _name: &str, _value: &str) -> Result<(), Error> {
+        Err(Error::Internal(
+            "The agent does not write secrets to the config file".to_string(),
+        ))
     }
 }
 
