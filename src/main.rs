@@ -62,7 +62,7 @@ fn compute_working_dir() -> PathBuf {
 
 fn agent_start(settings_data: Settings, is_service: bool) -> Result<Vec<JoinHandle<()>>, Error> {
     let url = settings_data.openaev.url;
-    let secret_store = secrets::open();
+    let secret_store = secrets::open(settings_data.openaev.token)?;
     let unsecured_certificate = settings_data.openaev.unsecured_certificate;
     let with_proxy = settings_data.openaev.with_proxy;
     let installation_mode = settings_data.openaev.installation_mode;
@@ -137,12 +137,12 @@ fn main() -> Result<(), Error> {
     info!("Starting OpenAEV agent {} ({})", VERSION, Settings::mode());
     if service_stub::is_windows_service() {
         // Running as a Windows service
-        agent_start(settings_data, true).unwrap();
+        agent_start(settings_data, true)?;
         // Service stub is a blocking thread managed by Windows service
         service_stub::run().unwrap();
     } else {
         // Standalone execution
-        let agent_handle = agent_start(settings_data, false).unwrap();
+        let agent_handle = agent_start(settings_data, false)?;
         // In this mode, we need to wait for end of threads execution
         agent_handle
             .into_iter()
