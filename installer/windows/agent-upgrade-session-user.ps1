@@ -334,7 +334,7 @@ $installationDir=[System.Uri]::EscapeDataString("$OpenAEVPath")
 $OpenAEVService = "${OPENAEV_SERVICE_NAME}" -replace "openbas", "openaev"
 $OpenAEVService = "$OpenAEVService" -replace "OBAS", "OAEV"
 $serviceName=[System.Uri]::EscapeDataString("$OpenAEVService")
-Invoke-PlatformWebRequest -Parameters @{ Uri = "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/installer/openaev/windows/session-user/${OPENAEV_TOKEN}?installationDir=$installationDir&amp;serviceName=$serviceName"; Headers = @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" }; OutFile = "openaev-installer.ps1" } | Out-Null;
+Invoke-PlatformWebRequest -Parameters @{ Uri = "${OPENAEV_URL}/api/tenants/${OPENAEV_TENANT_ID}/agent/installer/openaev/windows/session-user/${OPENAEV_TOKEN}?installationDir=$installationDir&serviceName=$serviceName"; Headers = @{ "Authorization" = "Bearer ${OPENAEV_TOKEN}" }; OutFile = "openaev-installer.ps1" } | Out-Null;
 ./openaev-installer.ps1
 $AgentPath = $AgentPath -replace "openaev", "openbas"
 $AgentPath = $AgentPath -replace "OAEV", "OBAS"
