@@ -25,7 +25,9 @@ runs:
         components: clippy
 
     - name: Run cargo clippy
-      run: cargo clippy --target=${{ inputs.target }} -- -D warnings
+      env:
+        RUST_TARGET: ${{ inputs.target }}
+      run: cargo clippy --target="$RUST_TARGET" -- -D warnings
       shell: bash
 
     - name: Lint PowerShell installer scripts (PSScriptAnalyzer)

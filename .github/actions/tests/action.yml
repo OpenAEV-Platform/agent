@@ -30,10 +30,14 @@ runs:
     # tools (whoami, sh...) ahead of the Windows ones in the tests' PATH.
     - name: Run cargo test
       if: inputs.os != 'windows'
-      run: cargo test --target=${{ inputs.target }} --locked
+      env:
+        RUST_TARGET: ${{ inputs.target }}
+      run: cargo test --target="$RUST_TARGET" --locked
       shell: bash
 
     - name: Run cargo test (Windows)
       if: inputs.os == 'windows'
-      run: cargo test --target=${{ inputs.target }} --locked
+      env:
+        RUST_TARGET: ${{ inputs.target }}
+      run: cargo test --target="$env:RUST_TARGET" --locked
       shell: pwsh

@@ -7,16 +7,16 @@ permissions:
   contents: read
 jobs:
   validate-pr-title:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: "Generate a token"
         id: generate-token
         if: github.event.pull_request.head.repo.full_name == github.repository
         uses: actions/create-github-app-token@v3
         with:
-          app-id: ${{ secrets.OPENAEV_PR_CHECKS_APP_ID }}
+          client-id: ${{ vars.OPENAEV_PR_CHECKS_CLIENT_ID }}
           private-key: ${{ secrets.OPENAEV_PR_CHECKS_PRIVATE_KEY }}
       - name: "Validate PR title and create check"
-        uses: FiligranHQ/filigran-ci-tools/actions/pr-title-check@main
+        uses: FiligranHQ/filigran-ci-tools/actions/pr-title-check@7d1dbb14c31f82a69a00bf72ee5a18b85035e248 # main
         with:
           token: ${{ steps.generate-token.outputs.token }}

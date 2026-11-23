@@ -64,3 +64,16 @@ runs:
         status=$?
         kill "$server" 2>/dev/null
         exit $status
+
+    # SSL_CERT_FILE replaces the system store on Linux, so an empty file leaves only the
+    # bundled roots: the public URL must be validated by them alone.
+    # Forks skip it so their CI does not call filigran.io.
+    - name: Run the bundled roots test with an empty OS trust store (linux)
+      if: inputs.os == 'ubuntu' && github.repository_owner == 'OpenAEV-Platform'
+      shell: bash
+      env:
+        OAEV_BUNDLED_ROOTS_URL: https://filigran.io
+      run: |
+        : > "$RUNNER_TEMP/empty.pem"
+        SSL_CERT_FILE="$RUNNER_TEMP/empty.pem" \
+          cargo test --locked test_bundled_roots_are_trusted -- --ignored --nocapture

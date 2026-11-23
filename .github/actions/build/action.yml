@@ -35,6 +35,8 @@ runs:
         targets: ${{ inputs.target }}
 
     - name: Build (release)
+      env:
+        RUST_TARGET: ${{ inputs.target }}
       run: |
         # Static CRT linkage for Windows is configured in .cargo/config.toml
         # (target-feature=+crt-static) so VCRUNTIME140.dll is not required at
@@ -44,14 +46,16 @@ runs:
         # (not combine with) the target-specific rustflags in .cargo/config.toml,
         # effectively dropping +crt-static.  This was the root cause of the
         # VCRUNTIME140.dll missing error on Windows ARM64.
-        cargo build --target=${{ inputs.target }} --release --locked
+        cargo build --target="$RUST_TARGET" --release --locked
       shell: bash
 
     - name: Verify no dynamic CRT dependency (Windows)
       if: inputs.os == 'windows'
       shell: bash
+      env:
+        RUST_TARGET: ${{ inputs.target }}
       run: |
-        BIN="./target/${{ inputs.target }}/release/openaev-agent.exe"
+        BIN="./target/$RUST_TARGET/release/openaev-agent.exe"
         echo "Checking $BIN for VCRUNTIME imports…"
         # rustup includes llvm-objdump; use it instead of dumpbin which
         # may not be on PATH (especially on windows-11-arm runners).
@@ -66,6 +70,8 @@ runs:
     - name: Build agent installers with NSIS (Windows)
       if: inputs.os == 'windows'
       shell: pwsh
+      env:
+        RUST_TARGET: ${{ inputs.target }}
       run: |
         # The .nsi files reference ..\..\target\release\openaev-agent.exe (the
         # default unflavored release dir). Because we build with --target=...,
@@ -73,7 +79,7 @@ runs:
         # legacy path so makensis can find it.
         New-Item -ItemType Directory -Force -Path "./target/release" | Out-Null
         Copy-Item -Force `
-          "./target/${{ inputs.target }}/release/openaev-agent.exe" `
+          "./target/$env:RUST_TARGET/release/openaev-agent.exe" `
           "./target/release/openaev-agent.exe"
 
         $installers = @(
@@ -104,13 +110,17 @@ runs:
     # ──────────────────────────────────────────────────────────────
     - name: Stage binary + Windows installers for upload
       shell: bash
+      env:
+        OS_FAMILY: ${{ inputs.os }}
+        RUST_TARGET: ${{ inputs.target }}
+        JFROG_PATH: ${{ inputs.jfrog_path }}
       run: |
         set -euo pipefail
-        STAGE="staging/${{ inputs.jfrog_path }}"
+        STAGE="staging/$JFROG_PATH"
         mkdir -p "$STAGE"
 
-        if [[ "${{ inputs.os }}" == "windows" ]]; then
-          cp "./target/${{ inputs.target }}/release/openaev-agent.exe" \
+        if [[ "$OS_FAMILY" == "windows" ]]; then
+          cp "./target/$RUST_TARGET/release/openaev-agent.exe" \
              "$STAGE/openaev-agent.exe"
           for installer in agent-installer.exe \
                            agent-installer-service-user.exe \
@@ -118,7 +128,7 @@ runs:
             cp "./installer/windows/$installer" "$STAGE/openaev-$installer"
           done
         else
-          cp "./target/${{ inputs.target }}/release/openaev-agent" \
+          cp "./target/$RUST_TARGET/release/openaev-agent" \
              "$STAGE/openaev-agent"
         fi
 
