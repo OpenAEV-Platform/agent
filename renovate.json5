@@ -26,6 +26,13 @@
     },
     packageRules: [
         {
+            description: 'Digest updates have no release timestamp, so minimumReleaseAge would hold them as pending',
+            matchUpdateTypes: [
+                'digest',
+            ],
+            minimumReleaseAge: null,
+        },
+        {
             description: 'Majors are proposed on the Dependency Dashboard, not as a standing PR',
             matchUpdateTypes: [
                 'major',
