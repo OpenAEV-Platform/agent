@@ -41,4 +41,8 @@ runs:
         script="agent-${MODE%-non-elevated}-smoke.py"
         variant=""
         if [[ $MODE == *-non-elevated ]]; then variant="non-elevated"; fi
-        python .github/scripts/agent-service-smoke.py "smoke/$JFROG_PATH"
+        if [[ -n $variant ]]; then
+           python ".github/scripts/$script" "smoke/$JFROG_PATH" "$variant"
+         else
+           python ".github/scripts/$script" "smoke/$JFROG_PATH"
+         fi
