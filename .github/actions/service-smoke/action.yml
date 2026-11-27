@@ -1,7 +1,10 @@
 name: Service smoke
-description: "Install the last release as a service, upgrade it to this build, launch an implant and uninstall, against a mock platform"
+description: "Install the last release in an installation mode, upgrade it to this build, launch an implant and uninstall, against a mock platform"
 
 inputs:
+  mode:
+    description: "Installation mode: service or service-user"
+    required: true
   os:
     description: "Runner OS family: ubuntu, windows or macos"
     required: true
@@ -31,4 +34,7 @@ runs:
       shell: bash
       env:
         JFROG_PATH: ${{ inputs.jfrog_path }}
-      run: python .github/scripts/agent-service-smoke.py "smoke/$JFROG_PATH"
+        MODE: ${{ inputs.mode }}
+      run: |
+        set -euo pipefail
+        python ".github/scripts/agent-${MODE}-smoke.py" "smoke/$JFROG_PATH"

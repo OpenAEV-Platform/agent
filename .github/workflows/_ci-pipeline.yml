@@ -241,19 +241,24 @@ jobs:
           bin: ${{ matrix.bin }}
 
   # ──────────────────────────────────────────────────────────────────
-  # Run the agent as a service against a mock platform: install the
-  # last release with this branch's installer script, upgrade it to this
-  # build through an upgrade job, then have it launch the last released
-  # implant through an inject job, the way the real platform does.
+  # Run the agent in each installation mode against a mock platform:
+  # install the last release with this branch's installer script,
+  # upgrade it to this build through an upgrade job, then have it launch
+  # the last released implant through an inject job, the way the real
+  # platform does. The service-user mode is not run on macOS, whose
+  # user scripts cannot be installed unattended.
   # ──────────────────────────────────────────────────────────────────
   service-smoke:
-    name: "🛠️ Service smoke (${{ matrix.os }}-${{ matrix.arch }})"
+    name: "🛠️ Service smoke (${{ matrix.os }}-${{ matrix.arch }}, ${{ matrix.mode }})"
     needs: build
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
+        mode: [service, service-user]
+        os: [ubuntu, windows, macos]
+        arch: [x86_64, arm64]
         include:
           - os: ubuntu
             arch: x86_64
@@ -279,6 +284,9 @@ jobs:
             arch: arm64
             runner: macos-latest
             jfrog_path: macos/arm64
+        exclude:
+          - os: macos
+            mode: service-user
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -287,6 +295,7 @@ jobs:
         with:
           arch: ${{ matrix.arch }}
           jfrog_path: ${{ matrix.jfrog_path }}
+          mode: ${{ matrix.mode }}
           os: ${{ matrix.os }}
 
   # ──────────────────────────────────────────────────────────────────
