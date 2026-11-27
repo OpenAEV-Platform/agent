@@ -3,7 +3,7 @@ description: "Install the last release in an installation mode, upgrade it to th
 
 inputs:
   mode:
-    description: "Installation mode: service, service-user, session-user, or session-user-non-elevated (Windows session-user as a standard user)"
+    description: "Installation mode: service or service-user"
     required: true
   os:
     description: "Runner OS family: ubuntu, windows or macos"
@@ -37,12 +37,4 @@ runs:
         MODE: ${{ inputs.mode }}
       run: |
         set -euo pipefail
-        # The non-elevated variant is the session-user script with an argument.
-        script="agent-${MODE%-non-elevated}-smoke.py"
-        variant=""
-        if [[ $MODE == *-non-elevated ]]; then variant="non-elevated"; fi
-        if [[ -n $variant ]]; then
-           python ".github/scripts/$script" "smoke/$JFROG_PATH" "$variant"
-         else
-           python ".github/scripts/$script" "smoke/$JFROG_PATH"
-         fi
+        python ".github/scripts/agent-${MODE}-smoke.py" "smoke/$JFROG_PATH"

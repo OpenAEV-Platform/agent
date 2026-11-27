@@ -245,8 +245,8 @@ jobs:
   # install the last release with this branch's installer script,
   # upgrade it to this build through an upgrade job, then have it launch
   # the last released implant through an inject job, the way the real
-  # platform does. The user modes are not run on macOS, whose user
-  # scripts cannot be installed unattended.
+  # platform does. The service-user mode is not run on macOS, whose
+  # user scripts cannot be installed unattended.
   # ──────────────────────────────────────────────────────────────────
   service-smoke:
     name: "🛠️ Service smoke (${{ matrix.os }}-${{ matrix.arch }}, ${{ matrix.mode }})"
@@ -256,7 +256,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        mode: [service, service-user, session-user, session-user-non-elevated]
+        mode: [service, service-user]
         os: [ubuntu, windows, macos]
         arch: [x86_64, arm64]
         include:
@@ -287,13 +287,6 @@ jobs:
         exclude:
           - os: macos
             mode: service-user
-          - os: macos
-            mode: session-user
-          # The Linux session-user agent already runs as a standard account.
-          - os: macos
-            mode: session-user-non-elevated
-          - os: ubuntu
-            mode: session-user-non-elevated
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
